@@ -14,7 +14,7 @@
 
 @SET_MAKE@
 
-# Makefile.am for hello/man.
+# Makefile.am for freeq/man.
 #
 # Copyright 2004, 2005, 2006, 2007, 2008, 2009, 2010
 # Free Software Foundation, Inc.
@@ -98,6 +98,7 @@ subdir = man
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am ChangeLog
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/00gnulib.m4 \
+	$(top_srcdir)/m4/ax_lib_sqlite4.m4 \
 	$(top_srcdir)/m4/close-stream.m4 $(top_srcdir)/m4/closeout.m4 \
 	$(top_srcdir)/m4/codeset.m4 $(top_srcdir)/m4/configmake.m4 \
 	$(top_srcdir)/m4/errno_h.m4 $(top_srcdir)/m4/error.m4 \
@@ -665,6 +666,9 @@ REPLACE_WCWIDTH = @REPLACE_WCWIDTH@
 REPLACE_WRITE = @REPLACE_WRITE@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SQLITE4_CFLAGS = @SQLITE4_CFLAGS@
+SQLITE4_LDFLAGS = @SQLITE4_LDFLAGS@
+SQLITE4_VERSION = @SQLITE4_VERSION@
 STDBOOL_H = @STDBOOL_H@
 STDDEF_H = @STDDEF_H@
 STRIP = @STRIP@
@@ -733,7 +737,7 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-man_MANS = hello.1
+man_MANS = freeqd.1
 EXTRA_DIST = $(man_MANS)
 MAINTAINERCLEANFILES = $(man_MANS)
 
@@ -976,8 +980,8 @@ uninstall-man: uninstall-man1
 # Depend on the source, not the binary; we don't need to regenerate the
 # binary when any source file changes, only the main one.
 # Use -o so that the `missing' program can infer the output file.
-hello.1: $(top_srcdir)/src/hello.c $(common_mandeps)
-	$(HELP2MAN) --name="friendly greeting program" ../src/hello -o $@
+freeqd.1: $(top_srcdir)/src/freeqd.c $(common_mandeps)
+	$(HELP2MAN) --name="freeq daemon" ../src/freeqd -o $@
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

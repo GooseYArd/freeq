@@ -107,6 +107,7 @@ DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/build-aux/depcomp $(noinst_HEADERS)
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/00gnulib.m4 \
+	$(top_srcdir)/m4/ax_lib_sqlite4.m4 \
 	$(top_srcdir)/m4/close-stream.m4 $(top_srcdir)/m4/closeout.m4 \
 	$(top_srcdir)/m4/codeset.m4 $(top_srcdir)/m4/configmake.m4 \
 	$(top_srcdir)/m4/errno_h.m4 $(top_srcdir)/m4/error.m4 \
@@ -735,6 +736,9 @@ REPLACE_WCWIDTH = @REPLACE_WCWIDTH@
 REPLACE_WRITE = @REPLACE_WRITE@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
+SQLITE4_CFLAGS = @SQLITE4_CFLAGS@
+SQLITE4_LDFLAGS = @SQLITE4_LDFLAGS@
+SQLITE4_VERSION = @SQLITE4_VERSION@
 STDBOOL_H = @STDBOOL_H@
 STDDEF_H = @STDDEF_H@
 STRIP = @STRIP@

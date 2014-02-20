@@ -1,4 +1,4 @@
-# Makefile.am for hello/src.
+# Makefile.am for freeq/src.
 #
 # Copyright 1996, 1997, 2001, 2005, 2006, 2007, 2008 Free Software
 # Foundation, Inc.
@@ -17,9 +17,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 bin_PROGRAMS = freeqd
-hello_SOURCES = freeq.c system.h
+freeqd_SOURCES = freeq.c system.h
 
-hello_LDADD = $(LIBINTL) $(top_builddir)/lib/lib$(PACKAGE).a
+freeqd_LDADD = $(LIBINTL) $(top_builddir)/lib/lib$(PACKAGE).a
 
 localedir = $(datadir)/locale
 
