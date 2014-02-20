@@ -1,0 +1,20 @@
+2011-12-17  Reuben Thomas  <rrt@sc3d.org>
+
+	* gnulib: Update.
+	* .bzrignore: Add.
+	* .cvsignore: Remove.
+	* contrib/.cvsignore: Likewise.
+	* doc/.cvsignore: Likewise.
+	* man/.cvsignore: Likewise.
+	* po/.cvsignore: Likewise.
+	* src/.cvsignore: Likewise.
+	* tests/.cvsignore: Likewise.
+	* build/mkinstalldirs: Remove: no longer needed.
+	* po: Update.
+
+Copyright 1993, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+2004, 2005, 2006, 2008 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification, are
+permitted in any medium without royalty provided the copyright notice
+and this notice are preserved.

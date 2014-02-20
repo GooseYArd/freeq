@@ -1,0 +1,9 @@
+2014-02-19  Andy Bailey  <gooseyard@gmail.com>
+
+	* Makefile.am (freeqd.1): Initial version.
+
+Copyright (C) 1999, 2002, 2004, 2006 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
