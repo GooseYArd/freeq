@@ -1,9 +1,8 @@
-This is the README file for the GNU Hello distribution.
+This is the README file for the GNU Freeq distribution.
 Hello prints a friendly greeting.  It also serves as a sample GNU
 package, showing practices that may be useful for GNU projects.
 
-  Copyright (C) 1992, 1993, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-  2002, 2004, 2005, 2006, 2010 Free Software Foundation, Inc.
+  Copyright (C) 2014 Free Software Foundation, Inc.
 
   Copying and distribution of this file, with or without modification,
   are permitted in any medium without royalty provided the copyright
@@ -11,17 +10,17 @@ package, showing practices that may be useful for GNU projects.
 
 See the files ./INSTALL* for building and installation instructions.
 
-Primary distribution point: ftp://ftp.gnu.org/gnu/hello/
- automatic redirection: http://ftpmirror.gnu.org/hello
+Primary distribution point: ftp://ftp.gnu.org/gnu/freeq/
+ automatic redirection: http://ftpmirror.gnu.org/freeq
  list of mirrors for manual selection: http://www.gnu.org/prep/ftp.html
 
-Home page: http://www.gnu.org/software/hello/
+Home page: http://www.gnu.org/software/freeq/
 
-Mailing list: bug-hello@gnu.org
+Mailing list: bug-freeq@gnu.org
 - please use this list for all discussion: bug reports, enhancements, etc.
-- archived at: http://lists.gnu.org/pipermail/bug-hello
+- archived at: http://lists.gnu.org/pipermail/bug-freeq
 - anyone is welcome to join the list; to do so, visit
-  http://lists.gnu.org/mailman/listinfo/bug-hello
+  http://lists.gnu.org/mailman/listinfo/bug-freeq
 - there is no corresponding newsgroup.
 
 Bug reports:
@@ -45,9 +44,9 @@ your help in writing test cases, checking the documentation against the
 implementation, translating the program strings to other languages,
 etc., would still be very much appreciated.
 
-The basic Hello algorithm was described by B.W. Kernighan and
+The basic Freeq algorithm was described by B.W. Kernighan and
 D.M. Ritchie.  The GNU implementation is substantially more complex, in
 order to be a canonical example of a GNU package.  Many people have
 contributed; please see the ./AUTHORS and ./ChangeLog files.
 
-GNU Hello is free software.  See the file COPYING for copying conditions.
+GNU Freeq is free software.  See the file COPYING for copying conditions.
