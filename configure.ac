@@ -19,7 +19,8 @@ dnl Where to generate output; srcdir location.
 AC_CONFIG_HEADERS([config.h:config.in])dnl Keep filename to 8.3 for MS-DOS.
 AC_CONFIG_SRCDIR([src/freeq.c])
 
-AC_PROG_CC
+dnl AC_PROG_CC
+AC_PROG_CC_C99
 AC_PROG_CXX
 
 dnl Since we use gnulib: gl_EARLY must be called as soon as possible after

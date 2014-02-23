@@ -51,12 +51,36 @@ void freeq_set_userdata(struct freeq_ctx *ctx, void *userdata);
  *
  * access to freeq generated lists
  */
+
+typedef enum 
+{
+	FREEQ_COL_STRING, 
+	FREEQ_COL_NUMBER, 
+	FREEQ_COL_TIME,
+	FREEQ_COL_IPV4ADDR,
+	FREEQ_COL_IPV6ADDR,
+} freeq_coltype_t;
+
 struct freeq_column {
-        struct freeq_table *table;
-        const char *name;
-        int refcount;
+	const char *name;
+	freeq_coltype_t coltype;
+	struct freeq_column *next;
+	int refcount;
+	void *data;	
 };
+
+struct freeq_table {
+	struct freeq_ctx *ctx;
+	const char *name;
+	int numcols;
+	int numrows;
+	struct freeq_column *columns;
+	int refcount;
+};
+
+int freeq_table_column_new(struct freeq_table *table, const char *name, freeq_coltype_t coltype);
 struct freeq_column *freeq_column_get_next(struct freeq_column *column);
+struct freeq_column *freeq_column_unref(struct freeq_column *column);
 const char *freeq_column_get_name(struct freeq_column *column);
 const char *freeq_column_get_value(struct freeq_column *column);
 #define freeq_column_foreach(column, first_entry) \

@@ -27,9 +27,9 @@
 #include <string.h>
 #include <ctype.h>
 
-#include <freeq/libfreeq.h>
+#include "freeq/libfreeq.h"
 #include "libfreeq-private.h"
-#include <msgpack.h>
+#include "msgpack.h"
 
 /**
  * SECTION:libfreeq
@@ -233,17 +233,9 @@ FREEQ_EXPORT void freeq_set_log_priority(struct freeq_ctx *ctx, int priority)
   ctx->log_priority = priority;
 }
 
-struct freeq_column;
 struct freeq_column *freeq_column_get_next(struct freeq_column *column);
 const char *freeq_column_get_name(struct freeq_column *column);
 const char *freeq_column_get_value(struct freeq_column *column);
-
-struct freeq_table {
-  struct freeq_ctx *ctx;
-  const char *name;
-  struct freeq_column *columns;
-  int refcount;
-};
 
 FREEQ_EXPORT struct freeq_table *freeq_table_ref(struct freeq_table *table)
 {
@@ -260,8 +252,31 @@ FREEQ_EXPORT struct freeq_table *freeq_table_unref(struct freeq_table *table)
         table->refcount--;
         if (table->refcount > 0)
                 return NULL;
+
+	struct freeq_column *c = table->columns;
+	struct freeq_column *next;
+	while (c != NULL)
+	{
+		next = c->next;
+		freeq_column_unref(c);
+		c = next;
+	}
+
         dbg(table->ctx, "context %p released\n", table);
         free(table);
+        return NULL;
+}
+
+FREEQ_EXPORT struct freeq_column *freeq_column_unref(struct freeq_column *column)
+{
+        if (column == NULL)
+                return NULL;
+        column->refcount--;
+        if (column->refcount > 0)
+                return NULL;
+
+        // dbg(table->ctx, "context %p released\n", table);
+        free(column);
         return NULL;
 }
 
@@ -278,23 +293,33 @@ FREEQ_EXPORT int freeq_table_new_from_string(struct freeq_ctx *ctx, const char *
         if (!t)
                 return -ENOMEM;
 
+	t->numcols = 0;
+	t->numrows = 0;
         t->refcount = 1;
         t->ctx = ctx;
         *table = t;
         return 0;
 }
 
-FREEQ_EXPORT int freeq_table_column_new(struct freeq_table *t, const char *string, struct freeq_column **column)
+FREEQ_EXPORT int freeq_table_column_new(struct freeq_table *table, const char *name, freeq_coltype_t coltype)
 {
         struct freeq_column *c;
-
         c = calloc(1, sizeof(struct freeq_column));
         if (!c)
                 return -ENOMEM;
 
+	c->name = name;
         c->refcount = 1;
-        c->table = t;
-        *column = c;
+        // c->table = t;
+	c->coltype = coltype;
+	table->numcols++;
+
+	struct freeq_column *lastcol = table->columns;
+	
+	while (lastcol != NULL)
+		lastcol = lastcol->next;
+
+        lastcol = c;
         return 0;
 }
 
@@ -303,47 +328,59 @@ FREEQ_EXPORT struct freeq_column *freeq_table_get_some_column(struct freeq_table
         return NULL;
 }
 
-/* types I care about 
-   ints
-   strings
-   ip addresses
-   time_t values
-   not sure about floats */
-
-void pack(struct freeq_table *t) {
-
-  /* creates buffer and serializer instance. */
-  msgpack_sbuffer* buffer = msgpack_sbuffer_new();
-  msgpack_packer* pk = msgpack_packer_new(buffer, msgpack_sbuffer_write);
-  int j;
-
-  for(j = 0; j<23; j++) {
-    /* NB: the buffer needs to be cleared on each iteration */
-    msgpack_sbuffer_clear(buffer);
-
-    /* serializes ["Hello", "MessagePack"]. */
-    msgpack_pack_array(pk, 3);
-
-    msgpack_pack_raw(pk, 5);
-    msgpack_pack_raw_body(pk, "Hello", 5);
-
-    msgpack_pack_raw(pk, 11);
-    msgpack_pack_raw_body(pk, "MessagePack", 11);
-
-    msgpack_pack_int(pk, j);
-
-    /* deserializes it. */
-    msgpack_unpacked msg;
-    msgpack_unpacked_init(&msg);
-    bool success = msgpack_unpack_next(&msg, buffer->data, buffer->size, NULL);
-
-    /* prints the deserialized object. */
-    msgpack_object obj = msg.data;
-    msgpack_object_print(stdout, obj);  /*=> ["Hello", "MessagePack"] */
-    puts("");
-  }
-
-  /* cleaning */
-  msgpack_sbuffer_free(buffer);
-  msgpack_packer_free(pk);
+FREEQ_EXPORT msgpack_sbuffer *freeq_table_pack_msgpack(struct freeq_table *table)
+{
+        msgpack_sbuffer sbuf;
+	msgpack_sbuffer_init(&sbuf);
+	msgpack_packer pk;
+	msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
+	
+	msgpack_pack_array(&pk, table->numrows);
+	for (int i = 0; i < table->numrows; i++) {
+		msgpack_pack_array(&pk, table->numcols);
+		struct freeq_column *j = table->columns;
+		while (j != NULL)
+		{
+			switch (j->coltype) 
+			{
+			case FREEQ_COL_STRING:
+				//msgpack_pack_raw(&pk, strlen(strings[i]));
+				//msgpack_pack_raw_body(&pk, strings[i], strlen(strings[i]));
+				break;
+			case FREEQ_COL_NUMBER:
+				//msgpack_pack_int(&pk, nums[i]);
+				break;
+			case FREEQ_COL_IPV4ADDR:
+				break;
+			case FREEQ_COL_TIME:
+				break;
+			default:
+				break;
+			}
+			j = j->next;
+		}
+		//msgpack_pack_int(&pk, nums[i]);
+		//msgpack_pack_raw(&pk, strlen(strings[i]));
+		//msgpack_pack_raw_body(&pk, strings[i], strlen(strings[i]));	
+		//msgpack_pack_int(&pk, numshund[i]);
+	}
+  
+	printf("buffer size is: %d\n", sbuf.size);
+  
+	/* deserialize the buffer into msgpack_object instance. */
+	/* deserialized object is valid during the msgpack_zone instance alive. */
+	msgpack_zone mempool;
+	msgpack_zone_init(&mempool, 2048);
+  
+	msgpack_object deserialized;
+	msgpack_unpack(sbuf.data, sbuf.size, NULL, &mempool, &deserialized);
+  
+	/* print the deserialized object. */
+	msgpack_object_print(stdout, deserialized);
+	puts("");
+  
+	msgpack_zone_destroy(&mempool);
+	msgpack_sbuffer_destroy(&sbuf);
+  
+	return 0;
 }

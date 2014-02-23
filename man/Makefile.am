@@ -26,5 +26,5 @@ common_mandeps = $(top_srcdir)/configure.ac
 # Depend on the source, not the binary; we don't need to regenerate the
 # binary when any source file changes, only the main one.
 # Use -o so that the `missing' program can infer the output file.
-freeqd.1: $(top_srcdir)/src/freeqd.c $(common_mandeps)
+freeqd.1: $(top_srcdir)/src/freeqd.cc $(common_mandeps)
 	$(HELP2MAN) --name="freeq daemon" ../src/freeqd -o $@

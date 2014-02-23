@@ -57,32 +57,32 @@ main (int argc, char *argv[])
 
   while ((optc = getopt_long (argc, argv, "g:hnv", longopts, NULL)) != -1)
     switch (optc)
-      {
-      case 'v':
-	print_version ();
-	exit (EXIT_SUCCESS);
-	break;
-      case 'n':
-	node_name = optarg;
-	break;
-      case 'h':
-	print_help ();
-	exit (EXIT_SUCCESS);
-	break;
-      default:
-	lose = 1;
-	break;
-      }
+    {
+    case 'v':
+      print_version ();
+      exit (EXIT_SUCCESS);
+      break;
+    case 'n':
+      node_name = optarg;
+      break;
+    case 'h':
+      print_help ();
+      exit (EXIT_SUCCESS);
+      break;
+    default:
+      lose = 1;
+      break;
+    }
 
   if (lose || optind < argc)
-    {
-      if (optind < argc)
-	fprintf (stderr, _("%s: extra operand: %s\n"), program_name,
-		 argv[optind]);
-      fprintf (stderr, _("Try `%s --help' for more information.\n"),
-	       program_name);
-      exit (EXIT_FAILURE);
-    }
+  {
+    if (optind < argc)
+      fprintf (stderr, _("%s: extra operand: %s\n"), program_name,
+               argv[optind]);
+    fprintf (stderr, _("Try `%s --help' for more information.\n"),
+             program_name);
+    exit (EXIT_FAILURE);
+  }
 
   //google::InitGoogleLogging(argv[0]);
   DEBUG("starting publisher");
@@ -98,6 +98,16 @@ main (int argc, char *argv[])
   if (err < 0)
     exit(EXIT_FAILURE);
 
+  err = freeq_table_column_new(t, "name", FREEQ_COL_STRING);
+  if (err < 0)
+    exit(EXIT_FAILURE);
+  err = freeq_table_column_new(t, "rank", FREEQ_COL_STRING);
+  if (err < 0)
+    exit(EXIT_FAILURE);
+  err = freeq_table_column_new(t, "serial", FREEQ_COL_STRING);
+  if (err < 0)
+    exit(EXIT_FAILURE);
+  
   return publisher("ipc:///tmp/freeqd.ipc", "system_monitor");
 
   freeq_table_unref(t);
