@@ -1,4 +1,4 @@
-/* hello.c -- print a greeting message and exit.
+/* freeqd.c 
 
    Copyright 1992, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2005,
    2006, 2007, 2008, 2010, 2011 Free Software Foundation, Inc.
@@ -19,7 +19,8 @@
 #include <config.h>
 #include "system.h"
 #include "progname.h"
-#include "xalloc.h"
+#include "sqlite4.h"
+/* #include "xalloc.h" */
 
 static const struct option longopts[] = {
   {"greeting", required_argument, NULL, 'g'},
@@ -42,6 +43,18 @@ static void print_help (void);
 static void print_version (void);
 static void print_frame (const size_t len);
 
+static 
+int callback(void *NotUsed, int argc, sqlite4_value **argv, char **azColName){
+  int i;
+  printf("IN CALLBACK...\n");
+  for(i=0; i<argc; i++){
+    /* printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL"); */
+    printf("%s\n", azColName[i]);
+  }
+  printf("\n");
+  return 0;
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -51,6 +64,14 @@ main (int argc, char *argv[])
   wchar_t *mb_greeting;
   size_t len;
   greeting_type g = greet_traditional;
+
+  int res;
+  sqlite4 *pDb;
+  sqlite4_env *pEnv;
+  char *pErrMsg = 0;
+
+  // sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_INIT);
+  // sqlite4_initialize(pEnv);
 
   set_program_name (argv[0]);
 
@@ -107,25 +128,42 @@ main (int argc, char *argv[])
       exit (EXIT_FAILURE);
     }
 
-  len = mbsrtowcs(NULL, &greeting_msg, 0, NULL);
-  if (len == (size_t)-1)
-    {
-      fprintf (stderr, _("%s: conversion to a multibyte string failed\n"), program_name);
-      exit (EXIT_FAILURE);
-    }
-  mb_greeting = xmalloc((len + 1) * sizeof(wchar_t));
-  mbsrtowcs(mb_greeting, &greeting_msg, len + 1, NULL);
+  res = sqlite4_open(0, ":memory:", &pDb, 0);
+  if (res !=SQLITE4_OK) {
+    fprintf(stderr, "failed to open in-memory db\n");
+    exit(res);
+  }
 
-  /* Print greeting message and exit. */
-  if (g != greet_new)
-    wprintf (L"%ls\n", mb_greeting);
-  else
-    {
-      print_frame (len);
-      wprintf (L"| %ls |\n", mb_greeting);
-      print_frame (len);
-    }
-  free(mb_greeting);
+  res = sqlite4_exec(pDb, "create table tbl1(one varchar(10), two smallint);", callback, NULL);
+  if (res != SQLITE4_OK){
+    fprintf(stderr, "SQL error: %s\n", pErrMsg);
+    /* sqlite4_free(pErrMsg); */
+  } else
+    fprintf(stdout, "OK\n");
+    
+
+  res = sqlite4_exec(pDb, "insert into tbl1 values('hello!',10);", callback, NULL);
+  if (res != SQLITE4_OK){
+    fprintf(stderr, "SQL error: %s\n", pErrMsg);
+    /* sqlite4_free(pErrMsg); */
+  } else
+    fprintf(stdout, "OK\n");
+
+  res = sqlite4_exec(pDb, "insert into tbl1 values('goodbye', 20);", callback, NULL);
+  if (res != SQLITE4_OK){
+    fprintf(stderr, "SQL error: %s\n", pErrMsg);
+    /* sqlite4_free(pErrMsg); */
+  } else
+    fprintf(stdout, "OK\n");
+
+  res = sqlite4_exec(pDb, "select * from tbl1;", callback, NULL);
+  if (res != SQLITE4_OK){
+    fprintf(stderr, "SQL error: %s\n", pErrMsg);
+    /* sqlite4_free(pErrMsg); */
+  } else
+    fprintf(stdout, "OK\n");
+
+
 
   exit (EXIT_SUCCESS);
 }

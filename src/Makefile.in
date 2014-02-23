@@ -95,7 +95,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-bin_PROGRAMS = freeqd$(EXEEXT)
+bin_PROGRAMS = freeqd$(EXEEXT) system_monitor$(EXEEXT)
 subdir = src
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/build-aux/depcomp ChangeLog
@@ -140,11 +140,15 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
-am_freeqd_OBJECTS = freeq.$(OBJEXT)
+am_freeqd_OBJECTS = freeqd.$(OBJEXT)
 freeqd_OBJECTS = $(am_freeqd_OBJECTS)
 am__DEPENDENCIES_1 =
 freeqd_DEPENDENCIES = $(am__DEPENDENCIES_1) \
-	$(top_builddir)/lib/lib$(PACKAGE).a
+	$(top_builddir)/lib/lib$(PACKAGE).a $(am__DEPENDENCIES_1)
+am_system_monitor_OBJECTS = system_monitor.$(OBJEXT)
+system_monitor_OBJECTS = $(am_system_monitor_OBJECTS)
+system_monitor_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(top_builddir)/lib/lib$(PACKAGE).a $(am__DEPENDENCIES_1)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -161,6 +165,19 @@ DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
 am__depfiles_maybe = depfiles
 am__mv = mv -f
+CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
+	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
+AM_V_CXX = $(am__v_CXX_@AM_V@)
+am__v_CXX_ = $(am__v_CXX_@AM_DEFAULT_V@)
+am__v_CXX_0 = @echo "  CXX     " $@;
+am__v_CXX_1 = 
+CXXLD = $(CXX)
+CXXLINK = $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
+	-o $@
+AM_V_CXXLD = $(am__v_CXXLD_@AM_V@)
+am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
+am__v_CXXLD_0 = @echo "  CXXLD   " $@;
+am__v_CXXLD_1 = 
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 AM_V_CC = $(am__v_CC_@AM_V@)
@@ -173,8 +190,8 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(freeqd_SOURCES)
-DIST_SOURCES = $(freeqd_SOURCES)
+SOURCES = $(freeqd_SOURCES) $(system_monitor_SOURCES)
+DIST_SOURCES = $(freeqd_SOURCES) $(system_monitor_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -216,6 +233,9 @@ CFLAGS = @CFLAGS@
 CONFIG_INCLUDE = @CONFIG_INCLUDE@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
+CXX = @CXX@
+CXXDEPMODE = @CXXDEPMODE@
+CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DEFS = -DLOCALEDIR=\"$(localedir)\" @DEFS@
 DEPDIR = @DEPDIR@
@@ -234,6 +254,8 @@ EXEEXT = @EXEEXT@
 GETOPT_H = @GETOPT_H@
 GETTEXT_MACRO_VERSION = @GETTEXT_MACRO_VERSION@
 GLIBC21 = @GLIBC21@
+GLOG_CFLAGS = @GLOG_CFLAGS@
+GLOG_LIBS = @GLOG_LIBS@
 GMSGFMT = @GMSGFMT@
 GMSGFMT_015 = @GMSGFMT_015@
 GNULIB_ATOLL = @GNULIB_ATOLL@
@@ -325,6 +347,7 @@ GNULIB_REALLOC_POSIX = @GNULIB_REALLOC_POSIX@
 GNULIB_REALPATH = @GNULIB_REALPATH@
 GNULIB_RMDIR = @GNULIB_RMDIR@
 GNULIB_RPMATCH = @GNULIB_RPMATCH@
+GNULIB_SECURE_GETENV = @GNULIB_SECURE_GETENV@
 GNULIB_SETENV = @GNULIB_SETENV@
 GNULIB_SETHOSTNAME = @GNULIB_SETHOSTNAME@
 GNULIB_SLEEP = @GNULIB_SLEEP@
@@ -480,6 +503,7 @@ HAVE_READLINK = @HAVE_READLINK@
 HAVE_READLINKAT = @HAVE_READLINKAT@
 HAVE_REALPATH = @HAVE_REALPATH@
 HAVE_RPMATCH = @HAVE_RPMATCH@
+HAVE_SECURE_GETENV = @HAVE_SECURE_GETENV@
 HAVE_SETENV = @HAVE_SETENV@
 HAVE_SETHOSTNAME = @HAVE_SETHOSTNAME@
 HAVE_SLEEP = @HAVE_SLEEP@
@@ -553,8 +577,8 @@ INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
 INTLLIBS = @INTLLIBS@
 INTL_MACOSX_LIBS = @INTL_MACOSX_LIBS@
 LDFLAGS = @LDFLAGS@
-LIBHELLO_LIBDEPS = @LIBHELLO_LIBDEPS@
-LIBHELLO_LTLIBDEPS = @LIBHELLO_LTLIBDEPS@
+LIBFREEQ_LIBDEPS = @LIBFREEQ_LIBDEPS@
+LIBFREEQ_LTLIBDEPS = @LIBFREEQ_LTLIBDEPS@
 LIBICONV = @LIBICONV@
 LIBINTL = @LIBINTL@
 LIBOBJS = @LIBOBJS@
@@ -572,6 +596,8 @@ MKDIR_P = @MKDIR_P@
 MSGFMT = @MSGFMT@
 MSGFMT_015 = @MSGFMT_015@
 MSGMERGE = @MSGMERGE@
+MSGPACK_CFLAGS = @MSGPACK_CFLAGS@
+MSGPACK_LIBS = @MSGPACK_LIBS@
 NEXT_AS_FIRST_DIRECTIVE_ERRNO_H = @NEXT_AS_FIRST_DIRECTIVE_ERRNO_H@
 NEXT_AS_FIRST_DIRECTIVE_GETOPT_H = @NEXT_AS_FIRST_DIRECTIVE_GETOPT_H@
 NEXT_AS_FIRST_DIRECTIVE_STDDEF_H = @NEXT_AS_FIRST_DIRECTIVE_STDDEF_H@
@@ -599,6 +625,9 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
+PKG_CONFIG = @PKG_CONFIG@
+PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
+PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POSUB = @POSUB@
 PRAGMA_COLUMNS = @PRAGMA_COLUMNS@
 PRAGMA_SYSTEM_HEADER = @PRAGMA_SYSTEM_HEADER@
@@ -699,6 +728,7 @@ abs_srcdir = @abs_srcdir@
 abs_top_builddir = @abs_top_builddir@
 abs_top_srcdir = @abs_top_srcdir@
 ac_ct_CC = @ac_ct_CC@
+ac_ct_CXX = @ac_ct_CXX@
 am__include = @am__include@
 am__leading_dot = @am__leading_dot@
 am__quote = @am__quote@
@@ -750,13 +780,17 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-freeqd_SOURCES = freeq.c system.h
-freeqd_LDADD = $(LIBINTL) $(top_builddir)/lib/lib$(PACKAGE).a
-AM_CPPFLAGS = -I$(top_srcdir)/lib -I$(top_builddir)/lib
+freeq_SOURCES = freeq.c system.h
+freeqd_SOURCES = freeqd.cc system.h
+system_monitor_SOURCES = system_monitor.cc system.h
+system_monitor_LDADD = $(LIBINTL) $(top_builddir)/lib/lib$(PACKAGE).a $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS)
+freeqd_LDADD = $(LIBINTL) $(top_builddir)/lib/lib$(PACKAGE).a $(NANOMSG_LDFLAGS) $(GLOG_LIBS)
+freeq_LDADD = $(LIBINTL) $(top_builddir)/lib/lib$(PACKAGE).a $(SQLITE4_LDFLAGS)
+AM_CPPFLAGS = -I$(top_srcdir)/lib -I$(top_builddir)/lib $(SQLITE4_CFLAGS)
 all: all-am
 
 .SUFFIXES:
-.SUFFIXES: .c .o .obj
+.SUFFIXES: .cc .o .obj
 $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
@@ -832,7 +866,11 @@ clean-binPROGRAMS:
 
 freeqd$(EXEEXT): $(freeqd_OBJECTS) $(freeqd_DEPENDENCIES) $(EXTRA_freeqd_DEPENDENCIES) 
 	@rm -f freeqd$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(freeqd_OBJECTS) $(freeqd_LDADD) $(LIBS)
+	$(AM_V_CXXLD)$(CXXLINK) $(freeqd_OBJECTS) $(freeqd_LDADD) $(LIBS)
+
+system_monitor$(EXEEXT): $(system_monitor_OBJECTS) $(system_monitor_DEPENDENCIES) $(EXTRA_system_monitor_DEPENDENCIES) 
+	@rm -f system_monitor$(EXEEXT)
+	$(AM_V_CXXLD)$(CXXLINK) $(system_monitor_OBJECTS) $(system_monitor_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -840,21 +878,22 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freeq.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/freeqd.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/system_monitor.Po@am__quote@
 
-.c.o:
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ $<
+.cc.o:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ $<
 
-.c.obj:
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+.cc.obj:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
 ID: $(am__tagged_files)
 	$(am__define_uniq_tagged_files); mkid -fID $$unique

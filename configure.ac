@@ -13,17 +13,14 @@ AC_INIT([Freeq], [0.1], [gooseyard@gmail.com],,[http://go.c800colon5.com/freeq])
 dnl Must come before AM_INIT_AUTOMAKE.
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([1.11.1 readme-alpha parallel-tests])
-
-dnl Minimum Autoconf version required.
 AC_PREREQ([2.62])
 
 dnl Where to generate output; srcdir location.
 AC_CONFIG_HEADERS([config.h:config.in])dnl Keep filename to 8.3 for MS-DOS.
 AC_CONFIG_SRCDIR([src/freeq.c])
 
-dnl Checks for programs.
-dnl We need a C compiler.
 AC_PROG_CC
+AC_PROG_CXX
 
 dnl Since we use gnulib: gl_EARLY must be called as soon as possible after
 dnl the C compiler is checked.  The others could be later, but we just
@@ -31,11 +28,35 @@ dnl keep everything together.
 gl_EARLY
 gl_INIT
 
+AC_PROG_RANLIB
+
 dnl Copyright will apply as long as these sources are in use, e.g., are
 dnl being compiled, which is reasonable year to claim the copyright.
 AC_DEFINE([COPYRIGHT_YEAR], [m4_esyscmd([date +%Y])], [year in copyright message])
 
 AX_LIB_SQLITE4
+
+AS_IF([test "x$ac_sqlite4_version" == "x"],
+	    [AC_MSG_ERROR([Unable to locate sqlite4])])
+
+AC_SEARCH_LIBS([nn_socket], [nanomsg], [], [
+  AC_MSG_ERROR([unable to find the nn_socket() function])
+])
+
+AC_CHECK_HEADERS([nanomsg/nn.h nanomsg/survey.h],
+			   [found_nanomsg_headers=yes; break;])
+
+AS_IF([test "x$found_nanomsg_headers" != "xyes"],
+	    [AC_MSG_ERROR([Unable to find the standard nanomsg headers])])
+
+PKG_CHECK_MODULES(MSGPACK, msgpack)
+
+AC_LANG_PUSH([C++])
+PKG_CHECK_MODULES(GLOG, libglog)
+AC_LANG_POP([C++])
+
+AC_GNU_SOURCE
+AC_CHECK_FUNCS([__secure_getenv secure_getenv])
 
 dnl GNU help2man creates man pages from --help output; in many cases, this
 dnl is sufficient, and obviates the need to maintain man pages separately.

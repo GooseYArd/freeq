@@ -97,7 +97,7 @@ AC_DEFUN([AX_LIB_SQLITE4],
             done
         fi
 
-        ac_sqlite4_ldflags="$ac_sqlite4_ldflags -lsqlite4"
+        ac_sqlite4_ldflags="$ac_sqlite4_ldflags -lsqlite4 -lpthread -lm"
 
         saved_CPPFLAGS="$CPPFLAGS"
         CPPFLAGS="$CPPFLAGS $ac_sqlite4_cppflags"
@@ -107,7 +107,7 @@ AC_DEFUN([AX_LIB_SQLITE4],
             [
             AC_LANG_PROGRAM([[@%:@include <sqlite4.h>]],
                 [[
-#if (SQLITE_VERSION_NUMBER >= $sqlite4_version_req_number)
+#if (SQLITE4_VERSION_NUMBER >= $sqlite4_version_req_number)
 /* Everything is okay */
 #else
 #  error SQLite version is too old
@@ -138,12 +138,12 @@ AC_DEFUN([AX_LIB_SQLITE4],
             dnl Retrieve SQLite release version
             if test "x$ac_sqlite4_header_path" != "x"; then
                 ac_sqlite4_version=`cat $ac_sqlite4_header_path \
-                    | grep '#define.*SQLITE_VERSION.*\"' | sed -e 's/.* "//' \
+                    | grep '#define.*SQLITE4_VERSION.*\"' | sed -e 's/.* "//' \
                         | sed -e 's/"//'`
                 if test $ac_sqlite4_version != ""; then
                     SQLITE4_VERSION=$ac_sqlite4_version
                 else
-                    AC_MSG_WARN([Cannot find SQLITE_VERSION macro in sqlite4.h header to retrieve SQLite version!])
+                    AC_MSG_WARN([Cannot find SQLITE4_VERSION macro in sqlite4.h header to retrieve SQLite version!])
                 fi
             fi
 

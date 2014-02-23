@@ -1,0 +1,1 @@
+./configure --prefix=/home/rbailey/src/install --with-sqlite4=/home/rbailey/src/sqlite4 CFLAGS=-I/home/rbailey/src/install/include LDFLAGS=-L/home/rbailey/src/install/lib CPPFLAGS=-I/home/rbailey/src/install/include PKG_CONFIG_PATH=/home/rbailey/src/install/lib/pkgconfig
