@@ -17,14 +17,16 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 bin_PROGRAMS = freeqd system_monitor
-freeq_SOURCES = freeq.c system.h
+
+lib_LTLIBRARIES = libfreeq-1.0.la
+libfreeq_1_0_la_SOURCES = libfreeq.c
 
 freeqd_SOURCES = freeqd.cc system.h
 system_monitor_SOURCES = system_monitor.cc system.h
 
-system_monitor_LDADD = $(LIBINTL) $(top_builddir)/lib/lib$(PACKAGE).a $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS)
-freeqd_LDADD = $(LIBINTL) $(top_builddir)/lib/lib$(PACKAGE).a $(NANOMSG_LDFLAGS) $(GLOG_LIBS)
-freeq_LDADD = $(LIBINTL) $(top_builddir)/lib/lib$(PACKAGE).a $(SQLITE4_LDFLAGS)
+system_monitor_LDADD = $(LIBINTL) $(top_builddir)/lib/libgnu.a libfreeq-1.0.la $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS)
+freeqd_LDADD = $(LIBINTL) $(top_builddir)/lib/libgnu.a libfreeq-1.0.la $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS)
+#freeq_LDADD = $(LIBINTL) $(top_builddir)/lib/lib$(PACKAGE).a $(SQLITE4_LDFLAGS)
 
 localedir = $(datadir)/locale
 

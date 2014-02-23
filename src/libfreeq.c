@@ -27,7 +27,7 @@
 #include <string.h>
 #include <ctype.h>
 
-#include "freeq/libfreeq.h"
+#include <freeq/libfreeq.h>
 #include "libfreeq-private.h"
 #include "msgpack.h"
 

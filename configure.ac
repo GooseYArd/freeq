@@ -15,6 +15,8 @@ AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([1.11.1 readme-alpha parallel-tests])
 AC_PREREQ([2.62])
 
+AC_CONFIG_MACRO_DIR([m4])
+
 dnl Where to generate output; srcdir location.
 AC_CONFIG_HEADERS([config.h:config.in])dnl Keep filename to 8.3 for MS-DOS.
 AC_CONFIG_SRCDIR([src/freeq.c])
@@ -29,7 +31,7 @@ dnl keep everything together.
 gl_EARLY
 gl_INIT
 
-AC_PROG_RANLIB
+LT_INIT
 
 dnl Copyright will apply as long as these sources are in use, e.g., are
 dnl being compiled, which is reasonable year to claim the copyright.

@@ -41,12 +41,12 @@ MAINTAINERCLEANFILES =
 AM_CPPFLAGS =
 AM_CFLAGS =
 
-noinst_LIBRARIES += libfreeq.a
+noinst_LIBRARIES += libgnu.a
 
-libfreeq_a_SOURCES = libfreeq.c
-libfreeq_a_LIBADD = $(gl_LIBOBJS)
-libfreeq_a_DEPENDENCIES = $(gl_LIBOBJS)
-EXTRA_libfreeq_a_SOURCES =
+libgnu_a_SOURCES =
+libgnu_a_LIBADD = $(gl_LIBOBJS)
+libgnu_a_DEPENDENCIES = $(gl_LIBOBJS)
+EXTRA_libgnu_a_SOURCES =
 
 ## begin gnulib module announce-gen
 
@@ -57,13 +57,13 @@ EXTRA_DIST += $(top_srcdir)/build-aux/announce-gen
 
 ## begin gnulib module c-ctype
 
-libfreeq_a_SOURCES += c-ctype.h c-ctype.c
+libgnu_a_SOURCES += c-ctype.h c-ctype.c
 
 ## end   gnulib module c-ctype
 
 ## begin gnulib module c-strcase
 
-libfreeq_a_SOURCES += c-strcase.h c-strcasecmp.c c-strncasecmp.c
+libgnu_a_SOURCES += c-strcase.h c-strcasecmp.c c-strncasecmp.c
 
 ## end   gnulib module c-strcase
 
@@ -76,7 +76,7 @@ EXTRA_DIST += c-strcaseeq.h
 
 ## begin gnulib module close-stream
 
-libfreeq_a_SOURCES += close-stream.c
+libgnu_a_SOURCES += close-stream.c
 
 EXTRA_DIST += close-stream.h
 
@@ -84,7 +84,7 @@ EXTRA_DIST += close-stream.h
 
 ## begin gnulib module closeout
 
-libfreeq_a_SOURCES += closeout.c
+libgnu_a_SOURCES += closeout.c
 
 EXTRA_DIST += closeout.h
 
@@ -180,13 +180,13 @@ EXTRA_DIST += errno.in.h
 
 EXTRA_DIST += error.c error.h
 
-EXTRA_libfreeq_a_SOURCES += error.c
+EXTRA_libgnu_a_SOURCES += error.c
 
 ## end   gnulib module error
 
 ## begin gnulib module exitfail
 
-libfreeq_a_SOURCES += exitfail.c
+libgnu_a_SOURCES += exitfail.c
 
 EXTRA_DIST += exitfail.h
 
@@ -197,7 +197,7 @@ EXTRA_DIST += exitfail.h
 
 EXTRA_DIST += fpending.c fpending.h
 
-EXTRA_libfreeq_a_SOURCES += fpending.c
+EXTRA_libgnu_a_SOURCES += fpending.c
 
 ## end   gnulib module fpending
 
@@ -231,7 +231,7 @@ MOSTLYCLEANFILES += getopt.h getopt.h-t
 
 EXTRA_DIST += getopt.c getopt.in.h getopt1.c getopt_int.h
 
-EXTRA_libfreeq_a_SOURCES += getopt.c getopt1.c
+EXTRA_libgnu_a_SOURCES += getopt.c getopt1.c
 
 ## end   gnulib module getopt-posix
 
@@ -254,7 +254,7 @@ EXTRA_DIST += $(top_srcdir)/build-aux/config.rpath
 
 ## begin gnulib module gettext-h
 
-libfreeq_a_SOURCES += gettext.h
+libgnu_a_SOURCES += gettext.h
 
 ## end   gnulib module gettext-h
 
@@ -298,7 +298,7 @@ EXTRA_DIST += intprops.h
 
 ## begin gnulib module localcharset
 
-libfreeq_a_SOURCES += localcharset.h localcharset.c
+libgnu_a_SOURCES += localcharset.h localcharset.c
 
 # We need the following in order to install a simple file in $(libdir)
 # which is shared with other installed packages. We use a list of referencing
@@ -381,7 +381,7 @@ EXTRA_DIST += $(top_srcdir)/maint.mk
 
 EXTRA_DIST += mbrtowc.c
 
-EXTRA_libfreeq_a_SOURCES += mbrtowc.c
+EXTRA_libgnu_a_SOURCES += mbrtowc.c
 
 ## end   gnulib module mbrtowc
 
@@ -390,7 +390,7 @@ EXTRA_libfreeq_a_SOURCES += mbrtowc.c
 
 EXTRA_DIST += mbsinit.c
 
-EXTRA_libfreeq_a_SOURCES += mbsinit.c
+EXTRA_libgnu_a_SOURCES += mbsinit.c
 
 ## end   gnulib module mbsinit
 
@@ -399,7 +399,7 @@ EXTRA_libfreeq_a_SOURCES += mbsinit.c
 
 EXTRA_DIST += mbsrtowcs-impl.h mbsrtowcs-state.c mbsrtowcs.c
 
-EXTRA_libfreeq_a_SOURCES += mbsrtowcs-state.c mbsrtowcs.c
+EXTRA_libgnu_a_SOURCES += mbsrtowcs-state.c mbsrtowcs.c
 
 ## end   gnulib module mbsrtowcs
 
@@ -408,7 +408,7 @@ EXTRA_libfreeq_a_SOURCES += mbsrtowcs-state.c mbsrtowcs.c
 
 EXTRA_DIST += memchr.c memchr.valgrind
 
-EXTRA_libfreeq_a_SOURCES += memchr.c
+EXTRA_libgnu_a_SOURCES += memchr.c
 
 ## end   gnulib module memchr
 
@@ -417,7 +417,7 @@ EXTRA_libfreeq_a_SOURCES += memchr.c
 
 EXTRA_DIST += msvc-inval.c msvc-inval.h
 
-EXTRA_libfreeq_a_SOURCES += msvc-inval.c
+EXTRA_libgnu_a_SOURCES += msvc-inval.c
 
 ## end   gnulib module msvc-inval
 
@@ -426,19 +426,19 @@ EXTRA_libfreeq_a_SOURCES += msvc-inval.c
 
 EXTRA_DIST += msvc-nothrow.c msvc-nothrow.h
 
-EXTRA_libfreeq_a_SOURCES += msvc-nothrow.c
+EXTRA_libgnu_a_SOURCES += msvc-nothrow.c
 
 ## end   gnulib module msvc-nothrow
 
 ## begin gnulib module progname
 
-libfreeq_a_SOURCES += progname.h progname.c
+libgnu_a_SOURCES += progname.h progname.c
 
 ## end   gnulib module progname
 
 ## begin gnulib module quotearg
 
-libfreeq_a_SOURCES += quotearg.c
+libgnu_a_SOURCES += quotearg.c
 
 EXTRA_DIST += quote.h quotearg.h
 
@@ -700,7 +700,7 @@ EXTRA_DIST += streq.h
 
 EXTRA_DIST += strerror.c
 
-EXTRA_libfreeq_a_SOURCES += strerror.c
+EXTRA_libgnu_a_SOURCES += strerror.c
 
 ## end   gnulib module strerror
 
@@ -709,7 +709,7 @@ EXTRA_libfreeq_a_SOURCES += strerror.c
 
 EXTRA_DIST += strerror-override.c strerror-override.h
 
-EXTRA_libfreeq_a_SOURCES += strerror-override.c
+EXTRA_libgnu_a_SOURCES += strerror-override.c
 
 ## end   gnulib module strerror-override
 
@@ -815,7 +815,7 @@ EXTRA_DIST += string.in.h
 
 ## begin gnulib module strnlen1
 
-libfreeq_a_SOURCES += strnlen1.h strnlen1.c
+libgnu_a_SOURCES += strnlen1.h strnlen1.c
 
 ## end   gnulib module strnlen1
 
@@ -847,7 +847,7 @@ EXTRA_DIST += sys_types.in.h
 ## begin gnulib module unistd
 
 BUILT_SOURCES += unistd.h
-libfreeq_a_SOURCES += unistd.c
+libgnu_a_SOURCES += unistd.c
 
 # We need the following in order to create an empty placeholder for
 # <unistd.h> when the system doesn't have one.
@@ -1140,7 +1140,7 @@ EXTRA_DIST += wchar.in.h
 ## begin gnulib module wctype-h
 
 BUILT_SOURCES += wctype.h
-libfreeq_a_SOURCES += wctype-h.c
+libgnu_a_SOURCES += wctype-h.c
 
 # We need the following in order to create <wctype.h> when the system
 # doesn't have one that works with the given compiler.
@@ -1179,7 +1179,7 @@ EXTRA_DIST += wctype.in.h
 
 ## begin gnulib module xalloc
 
-libfreeq_a_SOURCES += xmalloc.c
+libgnu_a_SOURCES += xmalloc.c
 
 EXTRA_DIST += xalloc.h
 
@@ -1187,7 +1187,7 @@ EXTRA_DIST += xalloc.h
 
 ## begin gnulib module xalloc-die
 
-libfreeq_a_SOURCES += xalloc-die.c
+libgnu_a_SOURCES += xalloc-die.c
 
 ## end   gnulib module xalloc-die
 
