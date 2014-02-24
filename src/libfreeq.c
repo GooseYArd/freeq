@@ -45,31 +45,31 @@
  * Opaque object representing the library context.
  */
 struct freeq_ctx {
-        int refcount;
-        void (*log_fn)(struct freeq_ctx *ctx,
-                       int priority, const char *file, int line, const char *fn,
-                       const char *format, va_list args);
-        void *userdata;
-        int log_priority;
+	int refcount;
+	void (*log_fn)(struct freeq_ctx *ctx,
+		       int priority, const char *file, int line, const char *fn,
+		       const char *format, va_list args);
+	void *userdata;
+	int log_priority;
 };
 
 void freeq_log(struct freeq_ctx *ctx,
-           int priority, const char *file, int line, const char *fn,
-           const char *format, ...)
+	   int priority, const char *file, int line, const char *fn,
+	   const char *format, ...)
 {
-        va_list args;
+	va_list args;
 
-        va_start(args, format);
-        ctx->log_fn(ctx, priority, file, line, fn, format, args);
-        va_end(args);
+	va_start(args, format);
+	ctx->log_fn(ctx, priority, file, line, fn, format, args);
+	va_end(args);
 }
 
 static void log_stderr(struct freeq_ctx *ctx,
-                       int priority, const char *file, int line, const char *fn,
-                       const char *format, va_list args)
+		       int priority, const char *file, int line, const char *fn,
+		       const char *format, va_list args)
 {
-        fprintf(stderr, "libfreeq: %s: ", fn);
-        vfprintf(stderr, format, args);
+	fprintf(stderr, "libfreeq: %s: ", fn);
+	vfprintf(stderr, format, args);
 }
 
 /**
@@ -83,9 +83,9 @@ static void log_stderr(struct freeq_ctx *ctx,
  **/
 FREEQ_EXPORT void *freeq_get_userdata(struct freeq_ctx *ctx)
 {
-        if (ctx == NULL)
-                return NULL;
-        return ctx->userdata;
+	if (ctx == NULL)
+		return NULL;
+	return ctx->userdata;
 }
 
 /**
@@ -97,26 +97,26 @@ FREEQ_EXPORT void *freeq_get_userdata(struct freeq_ctx *ctx)
  **/
 FREEQ_EXPORT void freeq_set_userdata(struct freeq_ctx *ctx, void *userdata)
 {
-        if (ctx == NULL)
-                return;
-        ctx->userdata = userdata;
+	if (ctx == NULL)
+		return;
+	ctx->userdata = userdata;
 }
 
 static int log_priority(const char *priority)
 {
-        char *endptr;
-        int prio;
+	char *endptr;
+	int prio;
 
-        prio = strtol(priority, &endptr, 10);
-        if (endptr[0] == '\0' || isspace(endptr[0]))
-                return prio;
-        if (strncmp(priority, "err", 3) == 0)
-                return LOG_ERR;
-        if (strncmp(priority, "info", 4) == 0)
-                return LOG_INFO;
-        if (strncmp(priority, "debug", 5) == 0)
-                return LOG_DEBUG;
-        return 0;
+	prio = strtol(priority, &endptr, 10);
+	if (endptr[0] == '\0' || isspace(endptr[0]))
+		return prio;
+	if (strncmp(priority, "err", 3) == 0)
+		return LOG_ERR;
+	if (strncmp(priority, "info", 4) == 0)
+		return LOG_INFO;
+	if (strncmp(priority, "debug", 5) == 0)
+		return LOG_DEBUG;
+	return 0;
 }
 
 /**
@@ -132,26 +132,26 @@ static int log_priority(const char *priority)
  **/
 FREEQ_EXPORT int freeq_new(struct freeq_ctx **ctx)
 {
-        const char *env;
-        struct freeq_ctx *c;
+	const char *env;
+	struct freeq_ctx *c;
 
-        c = calloc(1, sizeof(struct freeq_ctx));
-        if (!c)
-                return -ENOMEM;
+	c = calloc(1, sizeof(struct freeq_ctx));
+	if (!c)
+		return -ENOMEM;
 
-        c->refcount = 1;
-        c->log_fn = log_stderr;
-        c->log_priority = LOG_ERR;
+	c->refcount = 1;
+	c->log_fn = log_stderr;
+	c->log_priority = LOG_ERR;
 
-        /* environment overwrites config */
-        env = secure_getenv("FREEQ_LOG");
-        if (env != NULL)
-                freeq_set_log_priority(c, log_priority(env));
+	/* environment overwrites config */
+	env = secure_getenv("FREEQ_LOG");
+	if (env != NULL)
+		freeq_set_log_priority(c, log_priority(env));
 
-        info(c, "ctx %p created\n", c);
-        dbg(c, "log_priority=%d\n", c->log_priority);
-        *ctx = c;
-        return 0;
+	info(c, "ctx %p created\n", c);
+	dbg(c, "log_priority=%d\n", c->log_priority);
+	*ctx = c;
+	return 0;
 }
 
 /**
@@ -164,10 +164,10 @@ FREEQ_EXPORT int freeq_new(struct freeq_ctx **ctx)
  **/
 FREEQ_EXPORT struct freeq_ctx *freeq_ref(struct freeq_ctx *ctx)
 {
-        if (ctx == NULL)
-                return NULL;
-        ctx->refcount++;
-        return ctx;
+	if (ctx == NULL)
+		return NULL;
+	ctx->refcount++;
+	return ctx;
 }
 
 /**
@@ -179,14 +179,14 @@ FREEQ_EXPORT struct freeq_ctx *freeq_ref(struct freeq_ctx *ctx)
  **/
 FREEQ_EXPORT struct freeq_ctx *freeq_unref(struct freeq_ctx *ctx)
 {
-        if (ctx == NULL)
-                return NULL;
-        ctx->refcount--;
-        if (ctx->refcount > 0)
-                return NULL;
-        info(ctx, "context %p released\n", ctx);
-        free(ctx);
-        return NULL;
+	if (ctx == NULL)
+		return NULL;
+	ctx->refcount--;
+	if (ctx->refcount > 0)
+		return NULL;
+	info(ctx, "context %p released\n", ctx);
+	free(ctx);
+	return NULL;
 }
 
 /**
@@ -200,13 +200,13 @@ FREEQ_EXPORT struct freeq_ctx *freeq_unref(struct freeq_ctx *ctx)
  *
  **/
 FREEQ_EXPORT void freeq_set_log_fn(struct freeq_ctx *ctx,
-                              void (*log_fn)(struct freeq_ctx *ctx,
-                                             int priority, const char *file,
-                                             int line, const char *fn,
-                                             const char *format, va_list args))
+			      void (*log_fn)(struct freeq_ctx *ctx,
+					     int priority, const char *file,
+					     int line, const char *fn,
+					     const char *format, va_list args))
 {
-        ctx->log_fn = log_fn;
-        info(ctx, "custom logging function %p registered\n", log_fn);
+	ctx->log_fn = log_fn;
+	info(ctx, "custom logging function %p registered\n", log_fn);
 }
 
 /**
@@ -217,7 +217,7 @@ FREEQ_EXPORT void freeq_set_log_fn(struct freeq_ctx *ctx,
  **/
 FREEQ_EXPORT int freeq_get_log_priority(struct freeq_ctx *ctx)
 {
-        return ctx->log_priority;
+	return ctx->log_priority;
 }
 
 /**
@@ -239,19 +239,19 @@ const char *freeq_column_get_value(struct freeq_column *column);
 
 FREEQ_EXPORT struct freeq_table *freeq_table_ref(struct freeq_table *table)
 {
-        if (!table)
-                return NULL;
-        table->refcount++;
-        return table;
+	if (!table)
+		return NULL;
+	table->refcount++;
+	return table;
 }
 
 FREEQ_EXPORT struct freeq_table *freeq_table_unref(struct freeq_table *table)
 {
-        if (table == NULL)
-                return NULL;
-        table->refcount--;
-        if (table->refcount > 0)
-                return NULL;
+	if (table == NULL)
+		return NULL;
+	table->refcount--;
+	if (table->refcount > 0)
+		return NULL;
 
 	struct freeq_column *c = table->columns;
 	struct freeq_column *next;
@@ -262,93 +262,97 @@ FREEQ_EXPORT struct freeq_table *freeq_table_unref(struct freeq_table *table)
 		c = next;
 	}
 
-        dbg(table->ctx, "context %p released\n", table);
-        free(table);
-        return NULL;
+	dbg(table->ctx, "context %p released\n", table);
+	free(table);
+	return NULL;
 }
 
 FREEQ_EXPORT struct freeq_column *freeq_column_unref(struct freeq_column *column)
 {
-        if (column == NULL)
-                return NULL;
-        column->refcount--;
-        if (column->refcount > 0)
-                return NULL;
+	if (column == NULL)
+		return NULL;
+	column->refcount--;
+	if (column->refcount > 0)
+		return NULL;
 
-        // dbg(table->ctx, "context %p released\n", table);
-        free(column);
-        return NULL;
+	// dbg(table->ctx, "context %p released\n", table);
+	free(column);
+	return NULL;
 }
 
 FREEQ_EXPORT struct freeq_ctx *freeq_table_get_ctx(struct freeq_table *table)
 {
-        return table->ctx;
+	return table->ctx;
 }
 
 FREEQ_EXPORT int freeq_table_new_from_string(struct freeq_ctx *ctx, const char *string, struct freeq_table **table)
 {
-        struct freeq_table *t;
+	struct freeq_table *t;
 
-        t = calloc(1, sizeof(struct freeq_table));
-        if (!t)
-                return -ENOMEM;
+	t = calloc(1, sizeof(struct freeq_table));
+	if (!t)
+		return -ENOMEM;
 
 	t->numcols = 0;
 	t->numrows = 0;
-        t->refcount = 1;
-        t->ctx = ctx;
-        *table = t;
-        return 0;
+	t->refcount = 1;
+	t->ctx = ctx;
+	*table = t;
+	return 0;
 }
 
-FREEQ_EXPORT int freeq_table_column_new(struct freeq_table *table, const char *name, freeq_coltype_t coltype)
+FREEQ_EXPORT int freeq_table_column_new(struct freeq_table *table, const char *name, freeq_coltype_t coltype, void *data)
 {
-        struct freeq_column *c;
-        c = calloc(1, sizeof(struct freeq_column));
-        if (!c)
-                return -ENOMEM;
+	struct freeq_column *c;
+	c = calloc(1, sizeof(struct freeq_column));
+	if (!c)
+		return -ENOMEM;
 
 	c->name = name;
-        c->refcount = 1;
-        // c->table = t;
+	c->refcount = 1;
+	// c->table = t;
+	c->data = data;
 	c->coltype = coltype;
 	table->numcols++;
 
 	struct freeq_column *lastcol = table->columns;
-	
+
 	while (lastcol != NULL)
 		lastcol = lastcol->next;
 
-        lastcol = c;
-        return 0;
+	lastcol = c;
+	return 0;
 }
 
 FREEQ_EXPORT struct freeq_column *freeq_table_get_some_column(struct freeq_table *table)
 {
-        return NULL;
+	return NULL;
 }
 
-FREEQ_EXPORT msgpack_sbuffer *freeq_table_pack_msgpack(struct freeq_table *table)
+FREEQ_EXPORT void freeq_table_pack_msgpack(struct freeq_table *table)
 {
-        msgpack_sbuffer sbuf;
+	msgpack_sbuffer sbuf;
 	msgpack_sbuffer_init(&sbuf);
 	msgpack_packer pk;
 	msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
-	
 	msgpack_pack_array(&pk, table->numrows);
+	int len;
+	void *elem;
+
 	for (int i = 0; i < table->numrows; i++) {
 		msgpack_pack_array(&pk, table->numcols);
 		struct freeq_column *j = table->columns;
 		while (j != NULL)
 		{
-			switch (j->coltype) 
+			switch (j->coltype)
 			{
 			case FREEQ_COL_STRING:
-				//msgpack_pack_raw(&pk, strlen(strings[i]));
-				//msgpack_pack_raw_body(&pk, strings[i], strlen(strings[i]));
+				len = strlen(((const char*)j->data)[i]);
+				msgpack_pack_raw(&pk, len);
+				msgpack_pack_raw_body(&pk, ((const char *)j->data)[i], len);
 				break;
 			case FREEQ_COL_NUMBER:
-				//msgpack_pack_int(&pk, nums[i]);
+				//msgpack_pack_int(&pk, j->data[i]);
 				break;
 			case FREEQ_COL_IPV4ADDR:
 				break;
@@ -361,26 +365,26 @@ FREEQ_EXPORT msgpack_sbuffer *freeq_table_pack_msgpack(struct freeq_table *table
 		}
 		//msgpack_pack_int(&pk, nums[i]);
 		//msgpack_pack_raw(&pk, strlen(strings[i]));
-		//msgpack_pack_raw_body(&pk, strings[i], strlen(strings[i]));	
+		//msgpack_pack_raw_body(&pk, strings[i], strlen(strings[i]));
 		//msgpack_pack_int(&pk, numshund[i]);
 	}
-  
+
 	printf("buffer size is: %d\n", sbuf.size);
-  
+
 	/* deserialize the buffer into msgpack_object instance. */
 	/* deserialized object is valid during the msgpack_zone instance alive. */
 	msgpack_zone mempool;
 	msgpack_zone_init(&mempool, 2048);
-  
+
 	msgpack_object deserialized;
 	msgpack_unpack(sbuf.data, sbuf.size, NULL, &mempool, &deserialized);
-  
+
 	/* print the deserialized object. */
 	msgpack_object_print(stdout, deserialized);
 	puts("");
-  
+
 	msgpack_zone_destroy(&mempool);
 	msgpack_sbuffer_destroy(&sbuf);
-  
+
 	return 0;
 }

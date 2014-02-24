@@ -53,6 +53,7 @@ AS_IF([test "x$found_nanomsg_headers" != "xyes"],
 	    [AC_MSG_ERROR([Unable to find the standard nanomsg headers])])
 
 PKG_CHECK_MODULES(MSGPACK, msgpack)
+PKG_CHECK_MODULES(PROCPS, libprocps)
 
 AC_LANG_PUSH([C++])
 PKG_CHECK_MODULES(GLOG, libglog)

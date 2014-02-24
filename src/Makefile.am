@@ -24,7 +24,7 @@ libfreeq_1_0_la_SOURCES = libfreeq.c
 freeqd_SOURCES = freeqd.cc system.h
 system_monitor_SOURCES = system_monitor.cc system.h
 
-system_monitor_LDADD = $(LIBINTL) $(top_builddir)/lib/libgnu.a libfreeq-1.0.la $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS)
+system_monitor_LDADD = $(LIBINTL) $(top_builddir)/lib/libgnu.a libfreeq-1.0.la $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(PROCPS_LIBS)
 freeqd_LDADD = $(LIBINTL) $(top_builddir)/lib/libgnu.a libfreeq-1.0.la $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS)
 #freeq_LDADD = $(LIBINTL) $(top_builddir)/lib/lib$(PACKAGE).a $(SQLITE4_LDFLAGS)
 

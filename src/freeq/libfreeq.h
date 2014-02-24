@@ -26,6 +26,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "msgpack.h"
 
 /*
  * freeq_ctx
@@ -78,7 +79,7 @@ struct freeq_table {
 	int refcount;
 };
 
-int freeq_table_column_new(struct freeq_table *table, const char *name, freeq_coltype_t coltype);
+int freeq_table_column_new(struct freeq_table *table, const char *name, freeq_coltype_t coltype, void *data);
 struct freeq_column *freeq_column_get_next(struct freeq_column *column);
 struct freeq_column *freeq_column_unref(struct freeq_column *column);
 const char *freeq_column_get_name(struct freeq_column *column);
@@ -97,6 +98,7 @@ const char *freeq_column_get_value(struct freeq_column *column);
 struct freeq_table *freeq_table_ref(struct freeq_table *table);
 struct freeq_table *freeq_table_unref(struct freeq_table *table);
 struct freeq_ctx *freeq_table_get_ctx(struct freeq_table *table);
+void freeq_table_pack_msgpack(struct freeq_table *table);
 int freeq_table_new_from_string(struct freeq_ctx *ctx, const char *string, struct freeq_table **table);
 struct freeq_column *freeq_table_get_some_column(struct freeq_table *table);
 
