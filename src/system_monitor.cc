@@ -2,12 +2,12 @@
 #include "system.h"
 #include "progname.h"
 
-#include <assert.h>
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
 #include <nanomsg/nn.h>
 #include <nanomsg/pipeline.h>
+#include <assert.h>
 
 #include "freeq/libfreeq.h"
 #include <proc/readproc.h>
@@ -34,64 +34,68 @@ static void print_version (void);
 
 void procnothread(void) 
 {
+	//const char* url = "ipc:///tmp/freeqd.ipc";
+	//const char* appname = "system_monitor";
 	struct freeq_ctx *ctx;
-	struct freeq_table *t;
+	struct freeq_table *tbl;
 	int err;
 	
-	string machineip("127.0.0.1");
-	vector <string> machineips;
-	vector <int> pids;
-	vector <string> cmds;
-	
+	const char* machineip = "127.0.0.1";
 	err = freeq_new(&ctx);
 	if (err < 0)
 		exit(EXIT_FAILURE);
 	
-	err = freeq_table_new_from_string(ctx, "foo", &t);
+	//ctx->url = url;
+	//ctx->appname = appname;
+	err = freeq_table_new_from_string(ctx, "procnothread", &tbl);		
 	if (err < 0)
 		exit(EXIT_FAILURE);
 
-	PROCTAB* proc = openproc(PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLSTATUS);
-	proc_t proc_info;
-	memset(&proc_info, 0, sizeof(proc_info));
-	while (readproc(proc, &proc_info) != NULL) {
-		t->numrows++;
-		machineips.push_back(machineip);
-		pids.push_back(proc_info.ppid);
-		cmds.push_back(string(proc_info.cmd));
-		printf("%d %20s:\t%5ld\t%5lld\t%5lld\n", proc_info.ppid, proc_info.cmd, proc_info.resident, proc_info.utime, proc_info.stime);
+	proc_t** ptab = readproctab(PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLSTATUS);
+	for (tbl->numrows = 0 ; ptab[tbl->numrows] != NULL; tbl->numrows++);
+	
+	const char* machineips[tbl->numrows];
+	const char* cmds[tbl->numrows];
+	const int* pids[tbl->numrows];
+
+	for (int i = 0; i < tbl->numrows; i++) {
+		machineips[i] = machineip;
+		cmds[i] = ptab[i]->cmd;
+		pids[i] = &(ptab[i]->ppid);
 	}
-	 	
-	err = freeq_table_column_new(t, "machineip", FREEQ_COL_STRING, &machineips[0]);
+	
+	err = freeq_table_column_new(tbl, "machineip", FREEQ_COL_STRING, machineips);
 	if (err < 0)
 		exit(EXIT_FAILURE);
-	err = freeq_table_column_new(t, "pid", FREEQ_COL_NUMBER, &pids[0]);
+	err = freeq_table_column_new(tbl, "pid", FREEQ_COL_NUMBER, pids);
 	if (err < 0)
 		exit(EXIT_FAILURE);
-	err = freeq_table_column_new(t, "command", FREEQ_COL_STRING, &cmds[0]);
+	err = freeq_table_column_new(tbl, "command", FREEQ_COL_STRING, cmds);
 	if (err < 0)
 		exit(EXIT_FAILURE);
 
-	freeq_table_pack_msgpack(t);
-
-	freeq_table_unref(t);
+	freeq_table_send(ctx, tbl);
+	freeq_table_unref(tbl);
+	//freeproctab(ptab);
 	freeq_unref(ctx);
 }
 
 int publisher (const char *url, const char *msg)
 {
  
-  int sz_msg = strlen (msg) + 1; // '\0' too
-  int sock = nn_socket (AF_SP, NN_PUSH);
-  assert(sock >= 0);
-  assert(nn_connect (sock, url) >= 0);
-  
   procnothread();
+ 
+ // int sz_msg = strlen (msg) + 1;
+ //  int sock = nn_socket (AF_SP, NN_PUSH);
+ //  assert(sock >= 0);
+ //  assert(nn_connect (sock, url) >= 0);
+  
 
-  printf("NODE1: SENDING \"%s\"\n", msg);
-  int bytes = nn_send (sock, msg, sz_msg, 0);
-  assert(bytes == sz_msg);
-  return nn_shutdown (sock, 0);
+ //  printf("NODE1: SENDING \"%s\"\n", msg);
+ //  int bytes = nn_send (sock, msg, sz_msg, 0);
+ //  assert(bytes == sz_msg);
+ //  return nn_shutdown (sock, 0);
+
 }
 
 int 
@@ -140,9 +144,7 @@ main (int argc, char *argv[])
   }
 
   DEBUG("starting publisher");
-
   return publisher("ipc:///tmp/freeqd.ipc", "system_monitor");
-
   return EXIT_SUCCESS;
 
 }

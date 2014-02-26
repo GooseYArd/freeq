@@ -30,5 +30,5 @@ freeqd_LDADD = $(LIBINTL) $(top_builddir)/lib/libgnu.a libfreeq-1.0.la $(NANOMSG
 
 localedir = $(datadir)/locale
 
-AM_CPPFLAGS = -I$(top_srcdir)/lib -I$(top_builddir)/lib $(SQLITE4_CFLAGS)
+AM_CPPFLAGS = -I$(top_srcdir)/lib -I$(top_builddir)/lib $(SQLITE4_CFLAGS) -DENABLE_LOGGING -DENABLE_DEBUG
 DEFS = -DLOCALEDIR=\"$(localedir)\" @DEFS@

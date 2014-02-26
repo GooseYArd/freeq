@@ -26,11 +26,14 @@
 #include <errno.h>
 #include <string.h>
 #include <ctype.h>
+#include <assert.h>
 
 #include <freeq/libfreeq.h>
 #include "libfreeq-private.h"
 #include "msgpack.h"
 
+#include <nanomsg/nn.h>
+#include <nanomsg/pipeline.h>
 /**
  * SECTION:libfreeq
  * @short_description: libfreeq context
@@ -49,7 +52,9 @@ struct freeq_ctx {
 	void (*log_fn)(struct freeq_ctx *ctx,
 		       int priority, const char *file, int line, const char *fn,
 		       const char *format, va_list args);
-	void *userdata;
+	void* userdata;
+	const char* url;
+	const char* appname;
 	int log_priority;
 };
 
@@ -142,6 +147,8 @@ FREEQ_EXPORT int freeq_new(struct freeq_ctx **ctx)
 	c->refcount = 1;
 	c->log_fn = log_stderr;
 	c->log_priority = LOG_ERR;
+	c->url = "ipc://tmp/freeqd.ipc";
+	c->appname = "system_monitor";
 
 	/* environment overwrites config */
 	env = secure_getenv("FREEQ_LOG");
@@ -285,7 +292,7 @@ FREEQ_EXPORT struct freeq_ctx *freeq_table_get_ctx(struct freeq_table *table)
 	return table->ctx;
 }
 
-FREEQ_EXPORT int freeq_table_new_from_string(struct freeq_ctx *ctx, const char *string, struct freeq_table **table)
+FREEQ_EXPORT int freeq_table_new_from_string(struct freeq_ctx *ctx, const char *name, struct freeq_table **table)
 {
 	struct freeq_table *t;
 
@@ -293,6 +300,7 @@ FREEQ_EXPORT int freeq_table_new_from_string(struct freeq_ctx *ctx, const char *
 	if (!t)
 		return -ENOMEM;
 
+	t->name = name;
 	t->numcols = 0;
 	t->numrows = 0;
 	t->refcount = 1;
@@ -317,10 +325,14 @@ FREEQ_EXPORT int freeq_table_column_new(struct freeq_table *table, const char *n
 
 	struct freeq_column *lastcol = table->columns;
 
-	while (lastcol != NULL)
-		lastcol = lastcol->next;
-
-	lastcol = c;
+	if (lastcol == NULL)
+		table->columns = c;
+	else
+	{
+		while (lastcol->next != NULL)
+			lastcol = lastcol->next;
+		lastcol->next = c;
+	}
 	return 0;
 }
 
@@ -329,15 +341,40 @@ FREEQ_EXPORT struct freeq_column *freeq_table_get_some_column(struct freeq_table
 	return NULL;
 }
 
-FREEQ_EXPORT void freeq_table_pack_msgpack(struct freeq_table *table)
+FREEQ_EXPORT int freeq_table_send(struct freeq_ctx *ctx, struct freeq_table *table)
 {
 	msgpack_sbuffer sbuf;
+	int res;
 	msgpack_sbuffer_init(&sbuf);
+	res = freeq_table_pack_msgpack(&sbuf, ctx, table);
+
+	printf("freeq_table_send: table pack returned %d\n", res);
+
+	if (res == 0) {
+		const char *url = "ipc:///tmp/freeqd.ipc";
+		int sock = nn_socket(AF_SP, NN_PUSH);
+		assert(sock >= 0);
+		assert(nn_connect(sock, url) >= 0);
+		printf("sending \"%d\" btyes to %s\n", sbuf.size, url);
+		int bytes = nn_send(sock, sbuf.data, sbuf.size, 0);
+		printf("sent \"%d\" btyes\n", bytes);
+		assert(bytes == sbuf.size);
+		nn_shutdown(sock, 0);
+	}
+
+	msgpack_sbuffer_destroy(&sbuf);
+}
+
+FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ctx *c, struct freeq_table *table)
+{
 	msgpack_packer pk;
-	msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
+	msgpack_packer_init(&pk, sbuf, msgpack_sbuffer_write);
 	msgpack_pack_array(&pk, table->numrows);
 	int len;
 	void *elem;
+
+	dbg(c, "in msgpack", c->log_priority);
+	printf("DEBUG: in msgpack, %d cols %d rows\n", table->numcols, table->numrows);
 
 	for (int i = 0; i < table->numrows; i++) {
 		msgpack_pack_array(&pk, table->numcols);
@@ -347,12 +384,12 @@ FREEQ_EXPORT void freeq_table_pack_msgpack(struct freeq_table *table)
 			switch (j->coltype)
 			{
 			case FREEQ_COL_STRING:
-				len = strlen(((const char*)j->data)[i]);
+				len = strlen(((const char**)j->data)[i]);
 				msgpack_pack_raw(&pk, len);
-				msgpack_pack_raw_body(&pk, ((const char *)j->data)[i], len);
+				msgpack_pack_raw_body(&pk, ((const char **)j->data)[i], len);
 				break;
 			case FREEQ_COL_NUMBER:
-				//msgpack_pack_int(&pk, j->data[i]);
+				msgpack_pack_int(&pk, *(const int **)j->data[i]);
 				break;
 			case FREEQ_COL_IPV4ADDR:
 				break;
@@ -363,28 +400,23 @@ FREEQ_EXPORT void freeq_table_pack_msgpack(struct freeq_table *table)
 			}
 			j = j->next;
 		}
-		//msgpack_pack_int(&pk, nums[i]);
-		//msgpack_pack_raw(&pk, strlen(strings[i]));
-		//msgpack_pack_raw_body(&pk, strings[i], strlen(strings[i]));
-		//msgpack_pack_int(&pk, numshund[i]);
 	}
 
-	printf("buffer size is: %d\n", sbuf.size);
-
+	printf("buffer size is: %d\n", sbuf->size);
 	/* deserialize the buffer into msgpack_object instance. */
 	/* deserialized object is valid during the msgpack_zone instance alive. */
 	msgpack_zone mempool;
 	msgpack_zone_init(&mempool, 2048);
 
 	msgpack_object deserialized;
-	msgpack_unpack(sbuf.data, sbuf.size, NULL, &mempool, &deserialized);
+	msgpack_unpack(sbuf->data, sbuf->size, NULL, &mempool, &deserialized);
 
 	/* print the deserialized object. */
 	msgpack_object_print(stdout, deserialized);
 	puts("");
 
 	msgpack_zone_destroy(&mempool);
-	msgpack_sbuffer_destroy(&sbuf);
-
+	// msgpack_sbuffer_destroy(&sbuf);
 	return 0;
+
 }

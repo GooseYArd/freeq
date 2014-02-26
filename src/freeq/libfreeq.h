@@ -67,7 +67,7 @@ struct freeq_column {
 	freeq_coltype_t coltype;
 	struct freeq_column *next;
 	int refcount;
-	void *data;	
+	void **data;	
 };
 
 struct freeq_table {
@@ -98,7 +98,9 @@ const char *freeq_column_get_value(struct freeq_column *column);
 struct freeq_table *freeq_table_ref(struct freeq_table *table);
 struct freeq_table *freeq_table_unref(struct freeq_table *table);
 struct freeq_ctx *freeq_table_get_ctx(struct freeq_table *table);
-void freeq_table_pack_msgpack(struct freeq_table *table);
+
+int freeq_table_send(struct freeq_ctx *c, struct freeq_table *table);
+int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ctx *ctx, struct freeq_table *table);
 int freeq_table_new_from_string(struct freeq_ctx *ctx, const char *string, struct freeq_table **table);
 struct freeq_column *freeq_table_get_some_column(struct freeq_table *table);
 

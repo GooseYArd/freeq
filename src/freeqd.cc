@@ -33,16 +33,17 @@ char *date ()
 int receiver (const char *url)
 {
   int sock = nn_socket (AF_SP, NN_PULL);
-  assert (sock >= 0);
-  assert (nn_bind (sock, url) >= 0);
+  assert(sock >= 0);
+  assert(nn_bind (sock, url) >= 0);
   DEBUG("freeqd receiver is ready");
+  DEBUG(url);
   while (1)
     {
       char *buf = NULL;
-      int bytes = nn_recv (sock, &buf, NN_MSG, 0);
-      assert (bytes >= 0);
+      int bytes = nn_recv(sock, &buf, NN_MSG, 0);
+      assert(bytes >= 0);
       DEBUG("got message");
-      nn_freemsg (buf);
+      nn_freemsg(buf);
     }
 }
 
