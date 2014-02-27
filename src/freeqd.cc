@@ -46,6 +46,21 @@ char *date ()
 
 */
 
+const char *msgpack_get_string(msgpack_object *obj) 
+{
+	const char *s;
+	int bsize = -1;	      
+	msgpack_object identobj = obj->via.array.ptr[0];
+	printf("identobj.type is %d", identobj.type); 	
+	if (identobj.type == MSGPACK_OBJECT_RAW) {
+		bsize = obj->via.raw.size;
+		s = (char *)malloc(bsize);
+		memcpy(s, obj->via.raw.ptr, bsize);
+	} 
+	printf("STRING: %s", s);		
+	return s;
+}	
+
 int receiver (const char *url)
 {
   int sock = nn_socket (AF_SP, NN_PULL);
@@ -62,14 +77,14 @@ int receiver (const char *url)
       assert(bytes >= 0);
       printf("got %d bytes\n", bytes);
 
-      char *identity;
+      char *identity = NULL;
       char *name = NULL;
       msgpack_zone mempool;
       msgpack_zone_init(&mempool, 2048);
 
       unsigned char *b = NULL;
       int bsize = -1;
-
+      
       msgpack_object obj;
       msgpack_unpacked msg;
       msgpack_unpacked_init(&msg);
@@ -91,18 +106,18 @@ int receiver (const char *url)
       // }
 
       msgpack_unpack(buf, bytes, NULL, &mempool, &obj);
-
       // msgpack_object_print(stdout, obj);
-      msgpack_object nameobj = obj.via.array.ptr[0];
-      printf("nameobj.type is %d", nameobj.type); 
-
-      if (nameobj.type == MSGPACK_OBJECT_RAW) {
-	      bsize = nameobj.via.raw.size;
-	      name = (char *)malloc(bsize) + 1;
-	      memcpy(name, nameobj.via.raw.ptr, bsize);
+      msgpack_object identobj = obj.via.array.ptr[0];
+      printf("identobj.type is %d", identobj.type); 
+      if (identobj.type == MSGPACK_OBJECT_RAW) {
+	      bsize = identobj.via.raw.size;
+	      identity = (char *)malloc(bsize);
+	      memcpy(identity, identobj.via.raw.ptr, bsize);
 	      printf("bsize is %d", bsize);
       }
-      printf("NAME: %s", name);
+
+      printf("IDENTITY: %s", identity);
+
       // msgpack_object name = obj.via.array.ptr[1];
 
       // if (identity.type == MSGPACK_OBJECT_RAW ||

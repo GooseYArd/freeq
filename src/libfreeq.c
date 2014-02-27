@@ -379,7 +379,7 @@ FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ct
 	printf("DEBUG: in msgpack, %d cols %d rows\n", table->numcols, table->numrows);
 
 	msgpack_pack_raw(&pk, strlen(ctx->identity));
-	msgpack_pack_raw_body(&pk, table->name, strlen(ctx->identity));
+	msgpack_pack_raw_body(&pk, ctx->identity, strlen(ctx->identity));
 
 	msgpack_pack_raw(&pk, strlen(table->name));
 	msgpack_pack_raw_body(&pk, table->name, strlen(table->name));
