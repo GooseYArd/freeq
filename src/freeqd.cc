@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <nanomsg/nn.h>
 #include <nanomsg/pipeline.h>
+#include <msgpack.h>
 
 #define DEBUG(X) fprintf(stderr, _("DEBUG: %s\n"), X);
 
@@ -30,6 +31,21 @@ char *date ()
   return text;
 }
 
+/* how this should work
+   we get a serialized message
+   we deserialize the message and read the name of the table
+
+   when do we aggregate the rows that we have gotten from separate machines?
+   At akamai it made sense to aggregate tables in the region before sending them up
+   elsewhere, maybe not so much.
+
+   maybe for now what we should do
+   we could always have the table identify where it came from (machineip)
+   and on the agg what we do is just drop rows from table where machineip==whatever, and then insert
+   then we don't need to keep the message around
+
+*/
+
 int receiver (const char *url)
 {
   int sock = nn_socket (AF_SP, NN_PULL);
@@ -37,17 +53,99 @@ int receiver (const char *url)
   assert(nn_bind (sock, url) >= 0);
   DEBUG("freeqd receiver is ready");
   DEBUG(url);
+
   while (1)
     {
       char *buf = NULL;
+      int size;
       int bytes = nn_recv(sock, &buf, NN_MSG, 0);
       assert(bytes >= 0);
-      DEBUG("got message");
+      printf("got %d bytes\n", bytes);
+
+      char *identity;
+      char *name = NULL;
+      msgpack_zone mempool;
+      msgpack_zone_init(&mempool, 2048);
+
+      unsigned char *b = NULL;
+      int bsize = -1;
+
+      msgpack_object obj;
+      msgpack_unpacked msg;
+      msgpack_unpacked_init(&msg);
+
+      // if (msgpack_unpack_next(&msg, buf, size, NULL)) {
+      //	      msgpack_object root = msg.data;
+      //	      printf("root type is %d\n", root.type);
+
+      //	      if (root.type == MSGPACK_OBJECT_RAW) {
+      //		      bsize = root.via.raw.size;
+      //		      name = (char *)malloc(bsize);
+      //		      memcpy(name, root.via.raw.ptr, bsize);
+      //		      printf("bsize is %s", bsize);
+      //	      }
+      // }
+
+      // if (name != NULL) {
+      //	      printf("TABLE NAME IS %s", name);
+      // }
+
+      msgpack_unpack(buf, bytes, NULL, &mempool, &obj);
+
+      // msgpack_object_print(stdout, obj);
+      msgpack_object nameobj = obj.via.array.ptr[0];
+      printf("nameobj.type is %d", nameobj.type); 
+
+      if (nameobj.type == MSGPACK_OBJECT_RAW) {
+	      bsize = nameobj.via.raw.size;
+	      name = (char *)malloc(bsize) + 1;
+	      memcpy(name, nameobj.via.raw.ptr, bsize);
+	      printf("bsize is %d", bsize);
+      }
+      printf("NAME: %s", name);
+      // msgpack_object name = obj.via.array.ptr[1];
+
+      // if (identity.type == MSGPACK_OBJECT_RAW ||
+      //	  name.type == MSGPACK_OBJECT_RAW) {
+      //	      printf("IDENTITY: %s", "identity");
+      //	      printf("NAME: %s", "name");
+
+      //	      for (unsigned int i = 2; i < obj.via.array.size; i++) {
+      //		      msgpack_object o = obj.via.array.ptr[i];
+      //		      switch (i) {
+      //		      case 0:
+      //			      //EXPECT_EQ(MSGPACK_OBJECT_NIL, o.type);
+      //			      break;
+      //		      case 1:
+      //			      //EXPECT_EQ(MSGPACK_OBJECT_BOOLEAN, o.type);
+      //			      //EXPECT_EQ(true, o.via.boolean);
+      //			      break;
+      //		      case 2:
+      //			      //EXPECT_EQ(MSGPACK_OBJECT_BOOLEAN, o.type);
+      //			      //EXPECT_EQ(false, o.via.boolean);
+      //			      break;
+      //		      case 3:
+      //			      //EXPECT_EQ(MSGPACK_OBJECT_POSITIVE_INTEGER, o.type);
+      //			      //EXPECT_EQ(10, o.via.u64);
+      //			      break;
+      //		      case 4:
+      //			      //EXPECT_EQ(MSGPACK_OBJECT_NEGATIVE_INTEGER, o.type);
+      //			      //EXPECT_EQ(-10, o.via.i64);
+      //			      break;
+      //		      }
+      //	      }
+      // }
+
+      puts("");
+
+      msgpack_zone_destroy(&mempool);
+      //msgpack_sbuffer_destroy(&sbuf);
+
       nn_freemsg(buf);
     }
 }
 
-int 
+int
 main (int argc, char *argv[])
 {
 
@@ -87,9 +185,9 @@ main (int argc, char *argv[])
   {
     if (optind < argc)
       fprintf (stderr, _("%s: extra operand: %s\n"), program_name,
-               argv[optind]);
+	       argv[optind]);
     fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+	     program_name);
     exit (EXIT_FAILURE);
   }
 

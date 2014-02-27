@@ -45,7 +45,7 @@ void freeq_set_log_fn(struct freeq_ctx *ctx,
 int freeq_get_log_priority(struct freeq_ctx *ctx);
 void freeq_set_log_priority(struct freeq_ctx *ctx, int priority);
 void *freeq_get_userdata(struct freeq_ctx *ctx);
-void freeq_set_userdata(struct freeq_ctx *ctx, void *userdata);
+void freeq_set_identity(struct freeq_ctx *ctx, const char *identity);
 
 /*
  * freeq_list
@@ -61,6 +61,8 @@ typedef enum
 	FREEQ_COL_IPV4ADDR,
 	FREEQ_COL_IPV6ADDR,
 } freeq_coltype_t;
+
+
 
 struct freeq_column {
 	const char *name;

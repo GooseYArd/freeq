@@ -53,6 +53,7 @@ struct freeq_ctx {
 		       int priority, const char *file, int line, const char *fn,
 		       const char *format, va_list args);
 	void* userdata;
+	const char *identity;
 	const char* url;
 	const char* appname;
 	int log_priority;
@@ -77,6 +78,7 @@ static void log_stderr(struct freeq_ctx *ctx,
 	vfprintf(stderr, format, args);
 }
 
+
 /**
  * freeq_get_userdata:
  * @ctx: freeq library context
@@ -100,11 +102,11 @@ FREEQ_EXPORT void *freeq_get_userdata(struct freeq_ctx *ctx)
  *
  * Store custom @userdata in the library context.
  **/
-FREEQ_EXPORT void freeq_set_userdata(struct freeq_ctx *ctx, void *userdata)
+FREEQ_EXPORT void freeq_set_identity(struct freeq_ctx *ctx, const char *identity)
 {
 	if (ctx == NULL)
 		return;
-	ctx->userdata = userdata;
+	ctx->identity = identity;
 }
 
 static int log_priority(const char *priority)
@@ -365,7 +367,7 @@ FREEQ_EXPORT int freeq_table_send(struct freeq_ctx *ctx, struct freeq_table *tab
 	msgpack_sbuffer_destroy(&sbuf);
 }
 
-FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ctx *c, struct freeq_table *table)
+FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ctx *ctx, struct freeq_table *table)
 {
 	msgpack_packer pk;
 	msgpack_packer_init(&pk, sbuf, msgpack_sbuffer_write);
@@ -373,8 +375,14 @@ FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ct
 	int len;
 	void *elem;
 
-	dbg(c, "in msgpack", c->log_priority);
+	dbg(ctx, "in msgpack", ctx->log_priority);
 	printf("DEBUG: in msgpack, %d cols %d rows\n", table->numcols, table->numrows);
+
+	msgpack_pack_raw(&pk, strlen(ctx->identity));
+	msgpack_pack_raw_body(&pk, table->name, strlen(ctx->identity));
+
+	msgpack_pack_raw(&pk, strlen(table->name));
+	msgpack_pack_raw_body(&pk, table->name, strlen(table->name));
 
 	for (int i = 0; i < table->numrows; i++) {
 		msgpack_pack_array(&pk, table->numcols);

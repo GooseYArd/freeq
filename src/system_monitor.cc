@@ -47,6 +47,7 @@ void procnothread(void)
 	
 	//ctx->url = url;
 	//ctx->appname = appname;
+	freeq_set_identity(ctx, machineip);
 	err = freeq_table_new_from_string(ctx, "procnothread", &tbl);		
 	if (err < 0)
 		exit(EXIT_FAILURE);
@@ -89,7 +90,6 @@ int publisher (const char *url, const char *msg)
  //  int sock = nn_socket (AF_SP, NN_PUSH);
  //  assert(sock >= 0);
  //  assert(nn_connect (sock, url) >= 0);
-  
 
  //  printf("NODE1: SENDING \"%s\"\n", msg);
  //  int bytes = nn_send (sock, msg, sz_msg, 0);

@@ -163,8 +163,6 @@ main (int argc, char *argv[])
   } else
     fprintf(stdout, "OK\n");
 
-
-
   exit (EXIT_SUCCESS);
 }
 
