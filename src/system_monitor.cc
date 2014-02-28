@@ -57,12 +57,12 @@ void procnothread(void)
 	
 	const char* machineips[tbl->numrows];
 	const char* cmds[tbl->numrows];
-	const int* pids[tbl->numrows];
+	 int pids[tbl->numrows];
 
 	for (int i = 0; i < tbl->numrows; i++) {
 		machineips[i] = machineip;
 		cmds[i] = ptab[i]->cmd;
-		pids[i] = &(ptab[i]->ppid);
+		pids[i] = ptab[i]->ppid;
 	}
 	
 	err = freeq_table_column_new(tbl, "machineip", FREEQ_COL_STRING, machineips);

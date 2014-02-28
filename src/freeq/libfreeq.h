@@ -35,8 +35,11 @@ extern "C" {
  * environment, user variables, allows custom logging
  */
 struct freeq_ctx;
+struct freeq_table_header;
 struct freeq_ctx *freeq_ref(struct freeq_ctx *ctx);
 struct freeq_ctx *freeq_unref(struct freeq_ctx *ctx);
+struct freeq_table_header *freeq_table_header_unref(struct freeq_ctx *ctx, struct freeq_table_header *header);
+
 int freeq_new(struct freeq_ctx **ctx);
 void freeq_set_log_fn(struct freeq_ctx *ctx,
                   void (*log_fn)(struct freeq_ctx *ctx,
@@ -46,6 +49,7 @@ int freeq_get_log_priority(struct freeq_ctx *ctx);
 void freeq_set_log_priority(struct freeq_ctx *ctx, int priority);
 void *freeq_get_userdata(struct freeq_ctx *ctx);
 void freeq_set_identity(struct freeq_ctx *ctx, const char *identity);
+int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, msgpack_object *obj, struct freeq_table_header **table_header);
 
 /*
  * freeq_list
@@ -62,7 +66,11 @@ typedef enum
 	FREEQ_COL_IPV6ADDR,
 } freeq_coltype_t;
 
-
+struct freeq_table_header {
+	const char *identity;
+	const char *tablename;
+	int refcount;
+};
 
 struct freeq_column {
 	const char *name;

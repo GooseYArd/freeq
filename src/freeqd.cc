@@ -9,6 +9,7 @@
 #include <nanomsg/nn.h>
 #include <nanomsg/pipeline.h>
 #include <msgpack.h>
+#include "freeq/libfreeq.h"
 
 #define DEBUG(X) fprintf(stderr, _("DEBUG: %s\n"), X);
 
@@ -46,118 +47,75 @@ char *date ()
 
 */
 
-const char *msgpack_get_string(msgpack_object *obj) 
+int receiver (struct freeq_ctx *ctx, const char *url)
 {
-	const char *s;
-	int bsize = -1;	      
-	msgpack_object identobj = obj->via.array.ptr[0];
-	printf("identobj.type is %d", identobj.type); 	
-	if (identobj.type == MSGPACK_OBJECT_RAW) {
-		bsize = obj->via.raw.size;
-		s = (char *)malloc(bsize);
-		memcpy(s, obj->via.raw.ptr, bsize);
-	} 
-	printf("STRING: %s", s);		
-	return s;
-}	
+	int res;
+	int sock = nn_socket (AF_SP, NN_PULL);
+	assert(sock >= 0);
+	assert(nn_bind (sock, url) >= 0);
+	DEBUG("freeqd receiver is ready");
+	DEBUG(url);
 
-int receiver (const char *url)
-{
-  int sock = nn_socket (AF_SP, NN_PULL);
-  assert(sock >= 0);
-  assert(nn_bind (sock, url) >= 0);
-  DEBUG("freeqd receiver is ready");
-  DEBUG(url);
+	while (1)
+	{
+		char *buf = NULL;
+		int size;
+		int bytes = nn_recv(sock, &buf, NN_MSG, 0);
+		assert(bytes >= 0);
+		printf("got %d bytes\n", bytes);
 
-  while (1)
-    {
-      char *buf = NULL;
-      int size;
-      int bytes = nn_recv(sock, &buf, NN_MSG, 0);
-      assert(bytes >= 0);
-      printf("got %d bytes\n", bytes);
+		char *identity = NULL;
+		char *name = NULL;
+		msgpack_zone mempool;
+		msgpack_zone_init(&mempool, 2048);
 
-      char *identity = NULL;
-      char *name = NULL;
-      msgpack_zone mempool;
-      msgpack_zone_init(&mempool, 2048);
+		unsigned char *b = NULL;
+		int bsize = -1;
 
-      unsigned char *b = NULL;
-      int bsize = -1;
-      
-      msgpack_object obj;
-      msgpack_unpacked msg;
-      msgpack_unpacked_init(&msg);
+		msgpack_object obj;
+		msgpack_unpacked msg;
+		msgpack_unpacked_init(&msg);
 
-      // if (msgpack_unpack_next(&msg, buf, size, NULL)) {
-      //	      msgpack_object root = msg.data;
-      //	      printf("root type is %d\n", root.type);
+		freeq_table_header *header;
+		msgpack_unpack(buf, bytes, NULL, &mempool, &obj);
+		res = freeq_table_header_from_msgpack(ctx, &obj, &header);
+		
+		printf("IDENTITY: %s TABLENAME %s ROWS %d", header->identity, header->tablename, obj.via.array.size - 2);
 
-      //	      if (root.type == MSGPACK_OBJECT_RAW) {
-      //		      bsize = root.via.raw.size;
-      //		      name = (char *)malloc(bsize);
-      //		      memcpy(name, root.via.raw.ptr, bsize);
-      //		      printf("bsize is %s", bsize);
-      //	      }
-      // }
-
-      // if (name != NULL) {
-      //	      printf("TABLE NAME IS %s", name);
-      // }
-
-      msgpack_unpack(buf, bytes, NULL, &mempool, &obj);
-      // msgpack_object_print(stdout, obj);
-      msgpack_object identobj = obj.via.array.ptr[0];
-      printf("identobj.type is %d", identobj.type); 
-      if (identobj.type == MSGPACK_OBJECT_RAW) {
-	      bsize = identobj.via.raw.size;
-	      identity = (char *)malloc(bsize);
-	      memcpy(identity, identobj.via.raw.ptr, bsize);
-	      printf("bsize is %d", bsize);
-      }
-
-      printf("IDENTITY: %s", identity);
-
-      // msgpack_object name = obj.via.array.ptr[1];
-
-      // if (identity.type == MSGPACK_OBJECT_RAW ||
-      //	  name.type == MSGPACK_OBJECT_RAW) {
-      //	      printf("IDENTITY: %s", "identity");
-      //	      printf("NAME: %s", "name");
-
-      //	      for (unsigned int i = 2; i < obj.via.array.size; i++) {
-      //		      msgpack_object o = obj.via.array.ptr[i];
-      //		      switch (i) {
-      //		      case 0:
-      //			      //EXPECT_EQ(MSGPACK_OBJECT_NIL, o.type);
-      //			      break;
-      //		      case 1:
-      //			      //EXPECT_EQ(MSGPACK_OBJECT_BOOLEAN, o.type);
-      //			      //EXPECT_EQ(true, o.via.boolean);
-      //			      break;
-      //		      case 2:
-      //			      //EXPECT_EQ(MSGPACK_OBJECT_BOOLEAN, o.type);
-      //			      //EXPECT_EQ(false, o.via.boolean);
-      //			      break;
-      //		      case 3:
-      //			      //EXPECT_EQ(MSGPACK_OBJECT_POSITIVE_INTEGER, o.type);
-      //			      //EXPECT_EQ(10, o.via.u64);
-      //			      break;
-      //		      case 4:
-      //			      //EXPECT_EQ(MSGPACK_OBJECT_NEGATIVE_INTEGER, o.type);
-      //			      //EXPECT_EQ(-10, o.via.i64);
-      //			      break;
-      //		      }
-      //	      }
-      // }
-
-      puts("");
-
-      msgpack_zone_destroy(&mempool);
-      //msgpack_sbuffer_destroy(&sbuf);
-
-      nn_freemsg(buf);
-    }
+		for (unsigned int i = 2; i < obj.via.array.size; i++) {
+			printf("reading row %d\n", i-2);
+			msgpack_object o = obj.via.array.ptr[i];
+			printf("ROW SIZE: %d\n", o.via.array.size);
+			switch (o.type) {
+			case 0:
+				//EXPECT_EQ(MSGPACK_OBJECT_NIL, o.type);
+				break;
+			case 1:
+				//EXPECT_EQ(MSGPACK_OBJECT_BOOLEAN, o.type);
+				//EXPECT_EQ(true, o.via.boolean);
+				break;
+			case 2:
+				//EXPECT_EQ(MSGPACK_OBJECT_BOOLEAN, o.type);
+				//EXPECT_EQ(false, o.via.boolean);
+				break;
+			case 3:
+				printf("INTEGER!!!");
+				//EXPECT_EQ(MSGPACK_OBJECT_POSITIVE_INTEGER, o.type);
+				//EXPECT_EQ(10, o.via.u64);
+				break;
+			case 4:
+				printf("NEGATIVE INTEGER!!!");
+				//EXPECT_EQ(MSGPACK_OBJECT_NEGATIVE_INTEGER, o.type);
+				//EXPECT_EQ(-10, o.via.i64);
+				break;
+			}
+		}
+		
+		msgpack_zone_destroy(&mempool);
+		//msgpack_sbuffer_destroy(&sbuf);
+		freeq_table_header_unref(ctx, header);
+		nn_freemsg(buf);
+	}
 }
 
 int
@@ -206,8 +164,12 @@ main (int argc, char *argv[])
     exit (EXIT_FAILURE);
   }
 
+  struct freeq_ctx *ctx;
+  err = freeq_new(&ctx);
+  if (err < 0)
+	  exit(EXIT_FAILURE);
 
-  return receiver("ipc:///tmp/freeqd.ipc");
+  return receiver(ctx, "ipc:///tmp/freeqd.ipc");
 
 }
 

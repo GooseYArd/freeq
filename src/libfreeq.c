@@ -380,7 +380,6 @@ FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ct
 
 	msgpack_pack_raw(&pk, strlen(ctx->identity));
 	msgpack_pack_raw_body(&pk, ctx->identity, strlen(ctx->identity));
-
 	msgpack_pack_raw(&pk, strlen(table->name));
 	msgpack_pack_raw_body(&pk, table->name, strlen(table->name));
 
@@ -397,7 +396,7 @@ FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ct
 				msgpack_pack_raw_body(&pk, ((const char **)j->data)[i], len);
 				break;
 			case FREEQ_COL_NUMBER:
-				msgpack_pack_int(&pk, *(const int **)j->data[i]);
+				msgpack_pack_int(&pk, ((int *)j->data)[i]);
 				break;
 			case FREEQ_COL_IPV4ADDR:
 				break;
@@ -428,3 +427,43 @@ FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ct
 	return 0;
 
 }
+
+FREEQ_EXPORT struct freeq_table_header *freeq_table_header_unref(struct freeq_ctx *ctx, struct freeq_table_header *header)
+{
+	if (ctx == NULL)
+		return NULL;
+	free(header->tablename);
+	free(header->identity);
+	header->refcount--;
+	if (header->refcount > 0)
+		return NULL;
+	info(ctx, "header %p released\n", header);
+	free(header);
+	return NULL;	
+}
+
+FREEQ_EXPORT int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, msgpack_object *obj, struct freeq_table_header **table_header) 
+{
+	int bsize = -1;
+	struct freeq_table_header *th;
+	th = calloc(1, sizeof(struct freeq_table_header));
+	if (!th)
+		return -ENOMEM;
+
+	msgpack_object identobj = obj->via.array.ptr[0];
+	msgpack_object nameobj = obj->via.array.ptr[1];
+
+	if (identobj.type == MSGPACK_OBJECT_RAW) {
+		if (nameobj.type == MSGPACK_OBJECT_RAW) {
+			bsize = identobj.via.raw.size;
+			th->identity = calloc(1, bsize);
+			memcpy((void *)th->identity, identobj.via.raw.ptr, bsize);
+			bsize = nameobj.via.raw.size;
+			th->tablename = calloc(1, bsize);
+			memcpy((void *)th->tablename, nameobj.via.raw.ptr, bsize);
+		}
+	} 
+	
+	*table_header = th;
+	return 0;
+}	
