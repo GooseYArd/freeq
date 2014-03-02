@@ -59,9 +59,17 @@ freeq_log_null(struct freeq_ctx *ctx, const char *format, ...) {}
 
 #define FREEQ_EXPORT __attribute__ ((visibility("default")))
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void freeq_log(struct freeq_ctx *ctx,
            int priority, const char *file, int line, const char *fn,
            const char *format, ...)
            __attribute__((format(printf, 6, 7)));
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif

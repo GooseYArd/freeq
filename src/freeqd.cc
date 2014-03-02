@@ -8,10 +8,15 @@
 #include <stdio.h>
 #include <nanomsg/nn.h>
 #include <nanomsg/pipeline.h>
-#include <msgpack.h>
-#include "freeq/libfreeq.h"
 
-#define DEBUG(X) fprintf(stderr, _("DEBUG: %s\n"), X);
+#include <msgpack.hpp>
+#include "freeq/libfreeq.h"
+#include "libfreeq-private.h"
+
+#include <iostream>
+#include <vector>
+#include <string>
+#include <tuple>
 
 static const struct option longopts[] = {
   {"nodename", required_argument, NULL, 'n'},
@@ -19,6 +24,18 @@ static const struct option longopts[] = {
   {"version", no_argument, NULL, 'v'},
   {NULL, 0, NULL, 0}
 };
+
+class table {
+private:
+	std::string m_str;
+	std::vector<int> m_vec;
+public:
+	//MSGPACK_DEFINE(m_str, m_vec);
+};
+
+typedef std::vector<char> msgbuf;
+typedef std::tuple<std::string, std::string> tblmsgid;
+typedef std::map<tblmsgid, msgbuf> freeq_generation;
 
 static void print_help (void);
 static void print_version (void);
@@ -32,89 +49,99 @@ char *date ()
   return text;
 }
 
-/* how this should work
+/*
+   how this should work
+
+   if we are freeqd:
+
    we get a serialized message
    we deserialize the message and read the name of the table
 
-   when do we aggregate the rows that we have gotten from separate machines?
-   At akamai it made sense to aggregate tables in the region before sending them up
-   elsewhere, maybe not so much.
+   we check our generation map
+   if we have an entry for this identity and this tablename, we replace it with this message
+   if we do not have an entry for this identity and tablename, we store this message
 
-   maybe for now what we should do
-   we could always have the table identify where it came from (machineip)
-   and on the agg what we do is just drop rows from table where machineip==whatever, and then insert
-   then we don't need to keep the message around
+   if we are a region leader:
+   we get a serialized message
+   we deserialize the message and read the name of the table
 
 */
+
+int unpack_table(struct freeq_ctx *ctx, char *buf)
+{
+			// for (unsigned int i = 2; i < obj.via.array.size; i++) {
+		//	printf("reading row %d\n", i-2);
+		//	msgpack_object o = obj.via.array.ptr[i];
+		//	printf("ROW SIZE: %d\n", o.via.array.size);
+		//	switch (o.type) {
+		//	case 0:
+		//		//EXPECT_EQ(MSGPACK_OBJECT_NIL, o.type);
+		//		break;
+		//	case 1:
+		//		//EXPECT_EQ(MSGPACK_OBJECT_BOOLEAN, o.type);
+		//		//EXPECT_EQ(true, o.via.boolean);
+		//		break;
+		//	case 2:
+		//		//EXPECT_EQ(MSGPACK_OBJECT_BOOLEAN, o.type);
+		//		//EXPECT_EQ(false, o.via.boolean);
+		//		break;
+		//	case 3:
+		//		printf("INTEGER!!!");
+		//		//EXPECT_EQ(MSGPACK_OBJECT_POSITIVE_INTEGER, o.type);
+		//		//EXPECT_EQ(10, o.via.u64);
+		//		break;
+		//	case 4:
+		//		printf("NEGATIVE INTEGER!!!");
+		//		//EXPECT_EQ(MSGPACK_OBJECT_NEGATIVE_INTEGER, o.type);
+		//		//EXPECT_EQ(-10, o.via.i64);
+		//		break;
+		//	}
+		// }
+}
 
 int receiver (struct freeq_ctx *ctx, const char *url)
 {
 	int res;
-	int sock = nn_socket (AF_SP, NN_PULL);
+	int sock = nn_socket(AF_SP, NN_PULL);
 	assert(sock >= 0);
 	assert(nn_bind (sock, url) >= 0);
-	DEBUG("freeqd receiver is ready");
-	DEBUG(url);
+	dbg(ctx, "freeqd receiver is ready on url %s", url);
+
+	freeq_generation fg;
+	freeq_generation::iterator it;
 
 	while (1)
 	{
 		char *buf = NULL;
-		int size;
-		int bytes = nn_recv(sock, &buf, NN_MSG, 0);
-		assert(bytes >= 0);
-		printf("got %d bytes\n", bytes);
-
-		char *identity = NULL;
-		char *name = NULL;
-		msgpack_zone mempool;
-		msgpack_zone_init(&mempool, 2048);
+		size_t offset = 0;
+		int size = nn_recv(sock, &buf, NN_MSG, 0);
+		assert(size >= 0);
 
 		unsigned char *b = NULL;
 		int bsize = -1;
 
-		msgpack_object obj;
-		msgpack_unpacked msg;
-		msgpack_unpacked_init(&msg);
-
 		freeq_table_header *header;
-		msgpack_unpack(buf, bytes, NULL, &mempool, &obj);
-		res = freeq_table_header_from_msgpack(ctx, &obj, &header);
-		
-		printf("IDENTITY: %s TABLENAME %s ROWS %d", header->identity, header->tablename, obj.via.array.size - 2);
+		dbg(ctx, "receiver(): read %d bytes\n", size);
 
-		for (unsigned int i = 2; i < obj.via.array.size; i++) {
-			printf("reading row %d\n", i-2);
-			msgpack_object o = obj.via.array.ptr[i];
-			printf("ROW SIZE: %d\n", o.via.array.size);
-			switch (o.type) {
-			case 0:
-				//EXPECT_EQ(MSGPACK_OBJECT_NIL, o.type);
-				break;
-			case 1:
-				//EXPECT_EQ(MSGPACK_OBJECT_BOOLEAN, o.type);
-				//EXPECT_EQ(true, o.via.boolean);
-				break;
-			case 2:
-				//EXPECT_EQ(MSGPACK_OBJECT_BOOLEAN, o.type);
-				//EXPECT_EQ(false, o.via.boolean);
-				break;
-			case 3:
-				printf("INTEGER!!!");
-				//EXPECT_EQ(MSGPACK_OBJECT_POSITIVE_INTEGER, o.type);
-				//EXPECT_EQ(10, o.via.u64);
-				break;
-			case 4:
-				printf("NEGATIVE INTEGER!!!");
-				//EXPECT_EQ(MSGPACK_OBJECT_NEGATIVE_INTEGER, o.type);
-				//EXPECT_EQ(-10, o.via.i64);
-				break;
-			}
+		res = freeq_table_header_from_msgpack(ctx, buf, size, &header);
+		if (res) {
+			dbg(ctx, "invalid header in message, rejecting\n");
+			continue;
 		}
-		
-		msgpack_zone_destroy(&mempool);
-		//msgpack_sbuffer_destroy(&sbuf);
-		freeq_table_header_unref(ctx, header);
+
+		dbg(ctx, "receiver: IDENTITY: %s TABLENAME %s\n", header->identity, header->tablename);
+		tblmsgid tmid(header->identity, header->tablename);
+		if (fg.find(tmid) == fg.end())
+		{
+			dbg(ctx, "receiver: this is a new producer\n");
+			//fg[tmid] = msg;		
+		} else {
+			dbg(ctx, "current generation contains a block for this producer");
+		}
+
+		freeq_table_header_unref(ctx, header);		
 		nn_freemsg(buf);
+
 	}
 }
 
@@ -169,7 +196,10 @@ main (int argc, char *argv[])
   if (err < 0)
 	  exit(EXIT_FAILURE);
 
+  freeq_set_log_priority(ctx, 10);
   return receiver(ctx, "ipc:///tmp/freeqd.ipc");
+
+
 
 }
 

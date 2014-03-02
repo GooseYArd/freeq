@@ -49,7 +49,7 @@ int freeq_get_log_priority(struct freeq_ctx *ctx);
 void freeq_set_log_priority(struct freeq_ctx *ctx, int priority);
 void *freeq_get_userdata(struct freeq_ctx *ctx);
 void freeq_set_identity(struct freeq_ctx *ctx, const char *identity);
-int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, msgpack_object *obj, struct freeq_table_header **table_header);
+int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *buf, size_t bufsize, struct freeq_table_header **table_header);
 
 /*
  * freeq_list

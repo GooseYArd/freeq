@@ -55,6 +55,8 @@ AS_IF([test "x$found_nanomsg_headers" != "xyes"],
 PKG_CHECK_MODULES(MSGPACK, msgpack)
 PKG_CHECK_MODULES(PROCPS, libprocps)
 
+AX_CXX_COMPILE_STDCXX_11
+
 AC_LANG_PUSH([C++])
 PKG_CHECK_MODULES(GLOG, libglog)
 AC_LANG_POP([C++])
