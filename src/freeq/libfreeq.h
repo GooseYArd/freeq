@@ -69,6 +69,9 @@ typedef enum
 struct freeq_table_header {
 	const char *identity;
 	const char *tablename;
+	int numcolumns;
+	char **colnames;
+	int  **coltypes;
 	int refcount;
 };
 

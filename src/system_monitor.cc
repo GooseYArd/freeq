@@ -32,39 +32,34 @@ static const struct option longopts[] = {
 static void print_help (void);
 static void print_version (void);
 
-void procnothread(void) 
+void procnothread(const char *machineip)
 {
-	//const char* url = "ipc:///tmp/freeqd.ipc";
-	//const char* appname = "system_monitor";
 	struct freeq_ctx *ctx;
 	struct freeq_table *tbl;
 	int err;
-	
-	const char* machineip = "127.0.0.1";
+
 	err = freeq_new(&ctx);
 	if (err < 0)
 		exit(EXIT_FAILURE);
-	
-	//ctx->url = url;
-	//ctx->appname = appname;
+
 	freeq_set_identity(ctx, machineip);
-	err = freeq_table_new_from_string(ctx, "procnothread", &tbl);		
+	err = freeq_table_new_from_string(ctx, "procnothread", &tbl);
 	if (err < 0)
 		exit(EXIT_FAILURE);
 
 	proc_t** ptab = readproctab(PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLSTATUS);
 	for (tbl->numrows = 0 ; ptab[tbl->numrows] != NULL; tbl->numrows++);
-	
+
 	const char* machineips[tbl->numrows];
 	const char* cmds[tbl->numrows];
-	 int pids[tbl->numrows];
+	int pids[tbl->numrows];
 
 	for (int i = 0; i < tbl->numrows; i++) {
 		machineips[i] = machineip;
 		cmds[i] = ptab[i]->cmd;
 		pids[i] = ptab[i]->ppid;
 	}
-	
+
 	err = freeq_table_column_new(tbl, "machineip", FREEQ_COL_STRING, machineips);
 	if (err < 0)
 		exit(EXIT_FAILURE);
@@ -81,11 +76,11 @@ void procnothread(void)
 	freeq_unref(ctx);
 }
 
-int publisher (const char *url, const char *msg)
+int publisher (const char *url, const char *agent, const char *node_name)
 {
- 
-  procnothread();
- 
+
+  procnothread(node_name);
+
  // int sz_msg = strlen (msg) + 1;
  //  int sock = nn_socket (AF_SP, NN_PUSH);
  //  assert(sock >= 0);
@@ -98,7 +93,7 @@ int publisher (const char *url, const char *msg)
 
 }
 
-int 
+int
 main (int argc, char *argv[])
 {
   int optc;
@@ -114,18 +109,18 @@ main (int argc, char *argv[])
   textdomain (PACKAGE);
 #endif
 
-  while ((optc = getopt_long (argc, argv, "g:hnv", longopts, NULL)) != -1)
+  while ((optc = getopt_long(argc, argv, "g:hn:v", longopts, NULL)) != -1)
     switch (optc)
     {
     case 'v':
-      print_version ();
+      print_version();
       exit (EXIT_SUCCESS);
       break;
     case 'n':
       node_name = optarg;
       break;
     case 'h':
-      print_help ();
+      print_help();
       exit (EXIT_SUCCESS);
       break;
     default:
@@ -137,14 +132,15 @@ main (int argc, char *argv[])
   {
     if (optind < argc)
       fprintf (stderr, _("%s: extra operand: %s\n"), program_name,
-               argv[optind]);
+	       argv[optind]);
     fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
+	     program_name);
     exit (EXIT_FAILURE);
   }
 
   DEBUG("starting publisher");
-  return publisher("ipc:///tmp/freeqd.ipc", "system_monitor");
+
+  return publisher("ipc:///tmp/freeqd.ipc", "system_monitor", node_name);
   return EXIT_SUCCESS;
 
 }
@@ -173,9 +169,7 @@ Print a friendly, customizable greeting.\n"), stdout);
   /* TRANSLATORS: --help output 4: options 2/2
      no-wrap */
   fputs (_("\
-  -t, --traditional       use traditional greeting\n\
-  -n, --next-generation   use next-generation greeting\n\
-  -g, --greeting=TEXT     use TEXT as the greeting message\n"), stdout);
+  -n, --nodename=TEXT     use TEXT as the node name\n"), stdout);
 
   printf ("\n");
   /* TRANSLATORS: --help output 5+ (reports)
