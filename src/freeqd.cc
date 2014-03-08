@@ -55,28 +55,53 @@ static void print_version (void);
 
 int aggregate_table_segments(struct freeq_ctx *ctx, const char *name, table_segments *ts, freeq_table **table) {
 		
-	std::vector<freeq_table_header *> headers;
+	std::vector<freeq_table *> headers;
+	typedef std::pair<std::string, int> colsig_t;
+	typedef std::map<colsig_t, int> colprof_t;
+	bool consistant = true;
+
+	freeq_table *tbl;
+
+	colprof_t colprof;
+	int numcols = 0;
+	int sumrows = 0;
 	int res;
 	
 	dbg(ctx, "aggregating segments for table %s\n", name);
+
 	// first, determine if the column set is uniform among our publishers
 	for (table_segments::iterator it = ts->begin(); it != ts->end(); ++it) {
 		const std::string prov = it->first;
 		const msgbuf mb = it->second;
 		const size_t size = mb.first;
 		char *buf = mb.second;		
-		freeq_table_header *h;
-		dbg(ctx, "parsing header for provider %s\n", prov.c_str());
-		res = freeq_table_header_from_msgpack(ctx, buf, size, &h);
-		headers.push_back(h);	       		
+		freeq_table *tbl;
+		//dbg(ctx, "parsing header for provider %s\n", prov.c_str());
+		res = freeq_table_header_from_msgpack(ctx, buf, size, &tbl);
+		
+		sumrows += tbl->numrows;
+		//dbg(ctx, "ok cool, we parsed %d segment headers.\n", headers.size());	
+		freeq_column *c = tbl->columns;
+		numcols = 0;
+		while (c != NULL) {
+			colprof[colsig_t(c->name, c->coltype)]++;
+			c = c->next;
+			numcols++;
+		}
+		dbg(ctx, "segment %s:%s has %d columns\n", tbl->identity, tbl->name, numcols);
 	}
 	
-	dbg(ctx, "ok cool, we parsed %d segment headers.\n", headers.size());
-	for(std::vector<freeq_table_header *>::iterator it = headers.begin(); it != headers.end(); ++it) {
-		freeq_table_header *h = *it;
-		dbg(ctx, "segment %s has %d columns\n", h->tablename, h->numcolumns);
+	for (colprof_t::iterator it = colprof.begin(); it != colprof.end(); ++it) {
+		if (it->second != numcols) {
+			consistant = false;
+			dbg(ctx, "inconsistant schema!\n", "");
+			break;
+		}
 	}
 	
+	res = freeq_table_new_from_string(ctx, name, &tbl);
+	
+
 }
 
 int unpack_table(struct freeq_ctx *ctx, char *buf)
@@ -130,40 +155,40 @@ int receiver (struct freeq_ctx *ctx, const char *url)
 		int size = nn_recv(sock, &buf, NN_MSG, 0);
 		assert(size >= 0);
 
-		freeq_table_header *header;
+		freeq_table *table;
 		dbg(ctx, "receiver(): read %d bytes\n", size);
-		res = freeq_table_header_from_msgpack(ctx, buf, size, &header);
+		res = freeq_table_header_from_msgpack(ctx, buf, size, &table);
 		if (res) {
 			dbg(ctx, "invalid header in message, rejecting\n");
 			continue;
 		}
 
-		dbg(ctx, "identity: %s tablename %s\n", header->identity, header->tablename);
-
-		freeq_generation::iterator it = fg.find(header->tablename);
+		dbg(ctx, "identity: %s name %s\n", table->identity, table->name);
+		
+		freeq_generation::iterator it = fg.find(table->name);
 		if (it == fg.end())
 		{
 			dbg(ctx, "receiver: this is a new table\n");
-			fg[header->tablename][header->identity] = msgbuf(size, buf);
+			fg[std::string(table->name)][std::string(table->identity)] = msgbuf(size, buf);
 		} else {
 			table_segments ts = it->second;
-			table_segments::iterator jt = ts.find(header->identity);
+			table_segments::iterator jt = ts.find(table->identity);
 			dbg(ctx, "not a new table\n");
 			if (jt == ts.end()) {
-				dbg(ctx, "provider %s hasn't given us rows for %s\n", header->identity, header->tablename);
-				fg[header->tablename][header->identity] = msgbuf(size, buf);
+				dbg(ctx, "provider %s hasn't given us rows for %s\n", table->identity, table->name);
+				fg[table->name][table->identity] = msgbuf(size, buf);
 			} else {
-				dbg(ctx, "provider %s already gave us some rows for %s\n", header->identity, header->tablename);
+				dbg(ctx, "provider %s already gave us some rows for %s\n", table->identity, table->name);
 			}
 			
 		}
 
-		freeq_table_header_unref(ctx, header);
+		//freeq_table_header_unref(ctx, table);
 
 		for (it = fg.begin(); it != fg.end(); it++) {
 			freeq_table *t;
 			const char *name = it->first.c_str();
-			res = freeq_table_new_from_string(ctx, it->first.c_str(), &t);
+			//res = freeq_table_new_from_string(ctx, it->first.c_str(), &t);
 			res = aggregate_table_segments(ctx, name, &it->second, &t); 
 		}
 

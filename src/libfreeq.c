@@ -1,3 +1,4 @@
+
 /*
   libfreeq - support library for Free Software Telemtry System
 
@@ -349,6 +350,7 @@ FREEQ_EXPORT int freeq_table_send(struct freeq_ctx *ctx, struct freeq_table *tab
 	msgpack_sbuffer sbuf;
 	int res;
 	msgpack_sbuffer_init(&sbuf);
+	table->identity = ctx->identity;
 	res = freeq_table_pack_msgpack(&sbuf, ctx, table);
 
 	printf("freeq_table_send: table pack returned %d\n", res);
@@ -366,6 +368,49 @@ FREEQ_EXPORT int freeq_table_send(struct freeq_ctx *ctx, struct freeq_table *tab
 	}
 
 	msgpack_sbuffer_destroy(&sbuf);
+}
+
+
+/* 
+I could either:
+yeah I think that freeqd should do the concatenation of segments- otherwise
+the aggregator has to do a lot of extra work
+
+ */
+FREEQ_EXPORT int freeq_repack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ctx *ctx, char *msgs[])
+{
+	msgpack_packer pk;
+	msgpack_packer_init(&pk, sbuf, msgpack_sbuffer_write);
+
+	/* we know how many rows there are */
+
+	msgpack_unpacked obj;
+	msgpack_unpacked_init(&obj);
+
+	res = freeq_unpack_string(ctx, buf, bufsize, &offset, &identity);
+	if (res)
+		return res;
+	res = freeq_unpack_string(ctx, buf, bufsize, &offset, &name);
+	if (res)
+		return res;
+
+
+	if (msgpack_unpack_next(&obj, buf, bufsize, &offset)) {
+		if (obj.data.type == MSGPACK_OBJECT_ARRAY) {
+			numcols = obj.data.via.array.size;
+			for (int i=0; i < numcols; i++) {
+				err = freeq_table_column_new(tblp, NULL, obj.data.via.array.ptr[i].via.u64, NULL);
+				if (err < 0)
+					exit(EXIT_FAILURE);
+			}
+		} else {
+			err = 1;
+			//dbg(ctx, "object is not an array\n");
+		}
+
+
+
+
 }
 
 FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ctx *ctx, struct freeq_table *table)
@@ -436,8 +481,8 @@ FREEQ_EXPORT struct freeq_table_header *freeq_table_header_unref(struct freeq_ct
 {
 	if (ctx == NULL)
 		return NULL;
-	free(header->tablename);
-	free(header->identity);
+	//free(header->tablename);
+	//free(header->identity);
 	header->refcount--;
 	if (header->refcount > 0)
 		return NULL;
@@ -520,7 +565,7 @@ int freeq_unpack_string_array(struct freeq_ctx* ctx, char *buf, size_t bufsize, 
 	int scount = 0;
 	msgpack_unpacked obj;
 	msgpack_unpacked_init(&obj);
-	
+
 	//dbg(ctx, "trying to unpack an array of strings\n");
 	if (msgpack_unpack_next(&obj, buf, bufsize, offset)) {
 		if (obj.data.type == MSGPACK_OBJECT_ARRAY) {
@@ -531,10 +576,10 @@ int freeq_unpack_string_array(struct freeq_ctx* ctx, char *buf, size_t bufsize, 
 				err = -ENOMEM;
 			} else {
 				//dbg(ctx, "allocated an array of size %d\n", *numcols);
-				for (int i=0; i < *numcols; i++) {					
+				for (int i=0; i < *numcols; i++) {
 					bsize = obj.data.via.array.ptr[i].via.raw.size;
 					s = (char *)calloc(bsize, 1);
-					memcpy((void *)s, obj.data.via.array.ptr[i].via.raw.ptr, bsize); 
+					memcpy((void *)s, obj.data.via.array.ptr[i].via.raw.ptr, bsize);
 					strings[i] = s;
 				}
 			}
@@ -543,22 +588,26 @@ int freeq_unpack_string_array(struct freeq_ctx* ctx, char *buf, size_t bufsize, 
 			//dbg(ctx, "object is not an array\n");
 		}
 	}
-	
+
 	//dbg(ctx, "all is well, returning %s\n", s);
 	msgpack_unpacked_destroy(&obj);
 	return err;
 }
 
-FREEQ_EXPORT int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *buf, size_t bufsize, struct freeq_table_header **table_header)
+FREEQ_EXPORT int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *buf, size_t bufsize, struct freeq_table **table)
 {
 	int bsize = -1;
 	size_t offset = 0;
 	int res;
+	int err;
 	char *name, *identity;
 	char *colnames;
 	int numcols;
-	int (* coltypes)[];       
-	struct freeq_table_header *th;
+	int (* coltypes)[];
+	char *s;
+	struct freeq_table *tblp;
+	msgpack_unpacked obj;
+	msgpack_unpacked_init(&obj);
 
 	//dbg(ctx, "unpack identity\n");
 	res = freeq_unpack_string(ctx, buf, bufsize, &offset, &identity);
@@ -572,37 +621,58 @@ FREEQ_EXPORT int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *bu
 		return res;
 
 	//dbg(ctx, "name %s\n", name);
-	th = calloc(1, sizeof(struct freeq_table_header));
-	if (!th)
+	freeq_table_new_from_string(ctx, name, &tblp);
+	/* th = calloc(1, sizeof(struct freeq_table_header)); */
+	if (!tblp)
 	{
 		free(name);
 		free(identity);
 		return -ENOMEM;
 	}
 
-	//dbg(ctx, "unpack column types\n");
-	freeq_unpack_int_array(ctx, buf, bufsize, &offset, &coltypes, &numcols);
-	if (res) {
-		dbg(ctx, "failed to unpack column types: %d\n", res);
-		freeq_table_header_unref(ctx, th);
-		return res;
+	if (msgpack_unpack_next(&obj, buf, bufsize, &offset)) {
+		if (obj.data.type == MSGPACK_OBJECT_ARRAY) {
+			numcols = obj.data.via.array.size;
+			for (int i=0; i < numcols; i++) {
+				err = freeq_table_column_new(tblp, NULL, obj.data.via.array.ptr[i].via.u64, NULL);
+				if (err < 0)
+					exit(EXIT_FAILURE);
+			}
+		} else {
+			err = 1;
+			//dbg(ctx, "object is not an array\n");
+		}
 	}
 
-	//dbg(ctx, "unpack column names\n");
-	freeq_unpack_string_array(ctx, buf, bufsize, &offset, &colnames, &numcols);
-	if (res) {
-		//dbg(ctx, "failed to unpack column names: %d\n", res);
-		freeq_table_header_unref(ctx, th);
-		return res;
+	if (msgpack_unpack_next(&obj, buf, bufsize, &offset)) {
+		if (obj.data.type == MSGPACK_OBJECT_ARRAY) {
+			if (numcols == obj.data.via.array.size) {				
+				struct freeq_column *tcp = tblp->columns;
+				for (int i=0; i < numcols; i++) {
+					bsize = obj.data.via.array.ptr[i].via.raw.size;
+					s = (char *)calloc(bsize, 1);
+					memcpy((void *)s, obj.data.via.array.ptr[i].via.raw.ptr, bsize);
+					tcp->name = s;
+					tcp = tcp->next;
+				}
+			}
+		} else {
+			err = 1;
+			//dbg(ctx, "object is not an array\n");
+		}
 	}
+
+	/* if (res) { */
+	/*	//dbg(ctx, "failed to unpack column names: %d\n", res); */
+	/*	freeq_table_header_unref(ctx, th); */
+	/*	return res; */
+	/* } */
 
 	//dbg(ctx, "success\n");
-	th->refcount++;
-	th->identity = identity;
-	th->tablename = name;
-	th->coltypes = coltypes;
-	th->colnames = colnames;
-	th->numcolumns = numcols;
-	*table_header = th;
+	
+	tblp->identity = identity;
+	tblp->name = name;
+	*table = tblp;
+
 	return 0;
 }

@@ -49,7 +49,6 @@ int freeq_get_log_priority(struct freeq_ctx *ctx);
 void freeq_set_log_priority(struct freeq_ctx *ctx, int priority);
 void *freeq_get_userdata(struct freeq_ctx *ctx);
 void freeq_set_identity(struct freeq_ctx *ctx, const char *identity);
-int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *buf, size_t bufsize, struct freeq_table_header **table_header);
 
 /*
  * freeq_list
@@ -66,15 +65,6 @@ typedef enum
 	FREEQ_COL_IPV6ADDR,
 } freeq_coltype_t;
 
-struct freeq_table_header {
-	const char *identity;
-	const char *tablename;
-	int numcolumns;
-	char **colnames;
-	int  **coltypes;
-	int refcount;
-};
-
 struct freeq_column {
 	const char *name;
 	freeq_coltype_t coltype;
@@ -85,7 +75,8 @@ struct freeq_column {
 
 struct freeq_table {
 	struct freeq_ctx *ctx;
-	const char *name;
+	char *name;
+	const char *identity;
 	int numcols;
 	int numrows;
 	struct freeq_column *columns;
@@ -115,6 +106,7 @@ struct freeq_ctx *freeq_table_get_ctx(struct freeq_table *table);
 int freeq_table_send(struct freeq_ctx *c, struct freeq_table *table);
 int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ctx *ctx, struct freeq_table *table);
 int freeq_table_new_from_string(struct freeq_ctx *ctx, const char *string, struct freeq_table **table);
+int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *buf, size_t bufsize, struct freeq_table **table);
 struct freeq_column *freeq_table_get_some_column(struct freeq_table *table);
 
 #ifdef __cplusplus
