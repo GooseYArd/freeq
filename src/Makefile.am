@@ -21,6 +21,8 @@ bin_PROGRAMS = freeqd system_monitor
 lib_LTLIBRARIES = libfreeq-1.0.la
 libfreeq_1_0_la_SOURCES = libfreeq.c
 
+libfreeq_1_0_la_LIBADD = $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(PROCPS_LIBS)
+
 freeqd_SOURCES = freeqd.cc system.h
 system_monitor_SOURCES = system_monitor.cc system.h
 

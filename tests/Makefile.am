@@ -16,7 +16,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-TESTS = greeting-1 greeting-2 hello-1 last-1 traditional-1
+TESTS = check_basic
+
+check_PROGRAMS = check_basic
+check_basic_SOURCES = check_basic.c $(top_builddir)/src/freeq/freeq.h
+check_basic_CFLAGS = @CHECK_CFLAGS@
+check_basic_LDADD = $(top_builddir)/src/libfreeq-1.0.la @CHECK_LIBS@
 
 EXTRA_DIST = $(TESTS)
 

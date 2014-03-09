@@ -204,12 +204,12 @@ main (int argc, char *argv[])
   int err;
   const char *node_name = _("unknown");
 
-  set_program_name (argv[0]);
-  setlocale (LC_ALL, "");
+  set_program_name(argv[0]);
+  setlocale(LC_ALL, "");
 
 #if ENABLE_NLS
-  bindtextdomain (PACKAGE, LOCALEDIR);
-  textdomain (PACKAGE);
+  bindtextdomain(PACKAGE, LOCALEDIR);
+  textdomain(PACKAGE);
 #endif
 
   while ((optc = getopt_long (argc, argv, "g:hnv", longopts, NULL)) != -1)
@@ -249,6 +249,7 @@ main (int argc, char *argv[])
   freeq_set_log_priority(ctx, 10);
   return receiver(ctx, "ipc:///tmp/freeqd.ipc");
 
+//  freeq_unref(&ctx);
 
 
 }
