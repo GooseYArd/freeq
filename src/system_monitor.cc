@@ -38,7 +38,7 @@ void procnothread(const char *machineip)
 	struct freeq_table *tbl;
 	int err;
 
-	err = freeq_new(&ctx);
+	err = freeq_new(&ctx, "system_monitor", NULL);
 	if (err < 0)
 		exit(EXIT_FAILURE);
 

@@ -89,7 +89,7 @@ static void log_stderr(struct freeq_ctx *ctx,
  *
  * Returns: stored identity
  **/
-FREEQ_EXPORT void *freeq_get_identity(struct freeq_ctx *ctx)
+FREEQ_EXPORT const char *freeq_get_identity(struct freeq_ctx *ctx)
 {
 	if (ctx == NULL)
 		return NULL;
@@ -138,7 +138,7 @@ static int log_priority(const char *priority)
  *
  * Returns: a new freeq library context
  **/
-FREEQ_EXPORT int freeq_new(struct freeq_ctx **ctx)
+FREEQ_EXPORT int freeq_new(struct freeq_ctx **ctx, const char *appname, const char *identity)
 {
 	const char *env;
 	struct freeq_ctx *c;
@@ -150,18 +150,19 @@ FREEQ_EXPORT int freeq_new(struct freeq_ctx **ctx)
 	c->refcount = 1;
 	c->log_fn = log_stderr;
 	c->log_priority = LOG_ERR;
-	c->url = "ipc://tmp/freeqd.ipc";
-	c->appname = "system_monitor";
+	c->appname = appname;
+	c->identity = identity;
 
 	/* environment overwrites config */
 	env = secure_getenv("FREEQ_LOG");
 	if (env != NULL)
 		freeq_set_log_priority(c, log_priority(env));
 
-	env = secure_getenv("HOSTNAME");	
-	if (env != NULL)
-		freeq_set_identity(c, env);
-	
+	if (identity == NULL)
+		identity = secure_getenv("HOSTNAME");
+
+	freeq_set_identity(c, identity ? identity : "unknown");
+
 	info(c, "ctx %p created\n", c);
 	//dbg(c, "log_priority=%d\n", c->log_priority);
 	*ctx = c;
@@ -289,8 +290,30 @@ FREEQ_EXPORT struct freeq_column *freeq_column_unref(struct freeq_column *column
 	if (column->refcount > 0)
 		return NULL;
 
+	struct freeq_column_segment *s = column->segments;
+	struct freeq_column_segment *next;
+	while (s != NULL)
+	{
+		next = s->next;
+		freeq_column_segment_unref(s);
+		s = next;
+	}
+
 	// dbg(table->ctx, "context %p released\n", table);
 	free(column);
+	return NULL;
+}
+
+FREEQ_EXPORT struct freeq_column_segment *freeq_column_segment_unref(struct freeq_column_segment *segment)
+{
+	if (segment == NULL)
+		return NULL;
+	segment->refcount--;
+	if (segment->refcount > 0)
+		return NULL;
+
+	// dbg(table->ctx, "context %p released\n", table);
+	free(segment);
 	return NULL;
 }
 
@@ -319,14 +342,23 @@ FREEQ_EXPORT int freeq_table_new_from_string(struct freeq_ctx *ctx, const char *
 FREEQ_EXPORT int freeq_table_column_new(struct freeq_table *table, const char *name, freeq_coltype_t coltype, void *data)
 {
 	struct freeq_column *c;
+	struct freeq_column_segment *seg;
 	c = calloc(1, sizeof(struct freeq_column));
 	if (!c)
 		return -ENOMEM;
 
+	seg = calloc(1, sizeof(struct freeq_column_segment));
+	if (!seg) {
+		free(c);
+		return -ENOMEM;
+	}
+
 	c->name = name;
 	c->refcount = 1;
-	// c->table = t;
-	c->data = data;
+	seg->len = table->numrows;
+	seg->data = data;
+	seg->next = NULL;
+	c->segments = seg;
 	c->coltype = coltype;
 	table->numcols++;
 
@@ -382,43 +414,41 @@ the aggregator has to do a lot of extra work
  */
 /* FREEQ_EXPORT int freeq_repack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ctx *ctx, char *msgs[], int numsegs) */
 /* { */
-/* 	int offset; */
-/* 	size_t bufsize; */
-/* 	msgpack_packer pk; */
-/* 	msgpack_packer_init(&pk, sbuf, msgpack_sbuffer_write); */
+/*	int offset; */
+/*	size_t bufsize; */
+/*	msgpack_packer pk; */
+/*	msgpack_packer_init(&pk, sbuf, msgpack_sbuffer_write); */
 
-/* 	/\* we know how many rows there are *\/ */
+/*	/\* we know how many rows there are *\/ */
 
-/* 	msgpack_unpacked obj; */
-/* 	msgpack_unpacked_init(&obj); */
+/*	msgpack_unpacked obj; */
+/*	msgpack_unpacked_init(&obj); */
 
-/* 	res = freeq_unpack_string(ctx, buf, bufsize, &offset, &identity); */
-/* 	if (res) */
-/* 		return res; */
-/* 	res = freeq_unpack_string(ctx, buf, bufsize, &offset, &name); */
-/* 	if (res) */
-/* 		return res; */
+/*	res = freeq_unpack_string(ctx, buf, bufsize, &offset, &identity); */
+/*	if (res) */
+/*		return res; */
+/*	res = freeq_unpack_string(ctx, buf, bufsize, &offset, &name); */
+/*	if (res) */
+/*		return res; */
 
-/* 	/\* if (msgpack_unpack_next(&obj, buf, bufsize, &offset)) { *\/ */
-/* 	/\* 	if (obj.data.type == MSGPACK_OBJECT_ARRAY) { *\/ */
-/* 	/\* 		numcols = obj.data.via.array.size; *\/ */
-/* 	/\* 		for (int i=0; i < numcols; i++) { *\/ */
-/* 	/\* 			err = freeq_table_column_new(tblp, NULL, obj.data.via.array.ptr[i].via.u64, NULL); *\/ */
-/* 	/\* 			if (err < 0) *\/ */
-/* 	/\* 				exit(EXIT_FAILURE); *\/ */
-/* 	/\* 		} *\/ */
-/* 	/\* 	} else { *\/ */
-/* 	/\* 		err = 1; *\/ */
-/* 	/\* 		//dbg(ctx, "object is not an array\n"); *\/ */
-/* 	/\* 	} *\/ */
-
-
-
-
+/*	/\* if (msgpack_unpack_next(&obj, buf, bufsize, &offset)) { *\/ */
+/*	/\*	if (obj.data.type == MSGPACK_OBJECT_ARRAY) { *\/ */
+/*	/\*		numcols = obj.data.via.array.size; *\/ */
+/*	/\*		for (int i=0; i < numcols; i++) { *\/ */
+/*	/\*			err = freeq_table_column_new(tblp, NULL, obj.data.via.array.ptr[i].via.u64, NULL); *\/ */
+/*	/\*			if (err < 0) *\/ */
+/*	/\*				exit(EXIT_FAILURE); *\/ */
+/*	/\*		} *\/ */
+/*	/\*	} else { *\/ */
+/*	/\*		err = 1; *\/ */
+/*	/\*		//dbg(ctx, "object is not an array\n"); *\/ */
+/*	/\*	} *\/ */
 /* } */
 
 FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ctx *ctx, struct freeq_table *table)
 {
+	struct freeq_column *col = table->columns;
+	struct freeq_column_segment *seg;
 	msgpack_packer pk;
 	msgpack_packer_init(&pk, sbuf, msgpack_sbuffer_write);
 
@@ -427,53 +457,63 @@ FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ct
 
 	dbg(ctx, "freeq_table_pack_msgpack: identity %s table %s %d cols %d rows\n", ctx->identity, table->name, table->numcols, table->numrows);
 
+	if (ctx->identity == NULL)
+	{
+		dbg(ctx, "freeq_table_pack_msgpack: can't pack while ctx->identity is unset\n");
+		return 1;
+	}
+
 	msgpack_pack_raw(&pk, strlen(ctx->identity));
 	msgpack_pack_raw_body(&pk, ctx->identity, strlen(ctx->identity));
 	msgpack_pack_raw(&pk, strlen(table->name));
 	msgpack_pack_raw_body(&pk, table->name, strlen(table->name));
 
-	struct freeq_column *i = table->columns;
 	msgpack_pack_array(&pk, table->numcols);
-	while (i != NULL) {
-		//dbg(ctx, "col %s type %d\n", i->name, i->coltype);
-		msgpack_pack_int(&pk, i->coltype);
-		i = i->next;
+	while (col != NULL) {
+		//dbg(ctx, "col %s type %d\n", col->name, col->coltype);
+		msgpack_pack_int(&pk, col->coltype);
+		col = col->next;
 	}
 
-	i = table->columns;
+	col = table->columns;
 	msgpack_pack_array(&pk, table->numcols);
-	while (i != NULL) {
-		len = strlen(i->name);
+	while (col != NULL) {
+		len = strlen(col->name);
 		msgpack_pack_raw(&pk, len);
-		msgpack_pack_raw_body(&pk, i->name, len);
-		//dbg(ctx, "col name %s len %d\n", i->name, len);
-		i = i->next;
+		msgpack_pack_raw_body(&pk, col->name, len);
+		//dbg(ctx, "col name %s len %d\n", col->name, len);
+		col = col->next;
 	}
 
-	i = table->columns;
-	while (i != NULL) {
+	col = table->columns;
+	while (col != NULL) {
 		//dbg(ctx, "packing column %s\n", i->name);
 		msgpack_pack_array(&pk, table->numrows);
-		for (int j = 0; j < table->numrows; j++) {
-			switch (i->coltype)
-			{
-			case FREEQ_COL_STRING:
-				len = strlen(((const char**)i->data)[j]);
-				msgpack_pack_raw(&pk, len);
-				msgpack_pack_raw_body(&pk, ((const char **)i->data)[j], len);
-				break;
-			case FREEQ_COL_NUMBER:
-				msgpack_pack_int(&pk, ((int *)i->data)[j]);
-				break;
-			case FREEQ_COL_IPV4ADDR:
-				break;
-			case FREEQ_COL_TIME:
-				break;
-			default:
-				break;
+		seg = col->segments;
+		//for (int j = 0; j < table->numrows; j++) {
+		while (seg != NULL) {
+			for (int i = 0; i < seg->len; i++) {
+				switch (col->coltype)
+				{
+				case FREEQ_COL_STRING:
+					len = strlen(((const char**)seg->data)[i]);
+					msgpack_pack_raw(&pk, len);
+					msgpack_pack_raw_body(&pk, ((const char **)seg->data)[i], len);
+					break;
+				case FREEQ_COL_NUMBER:
+					msgpack_pack_int(&pk, ((int *)seg->data)[i]);
+					break;
+				case FREEQ_COL_IPV4ADDR:
+					break;
+				case FREEQ_COL_TIME:
+					break;
+				default:
+					break;
+				}
 			}
+			seg = seg->next;
 		}
-		i = i->next;
+		col = col->next;
 	}
 
 	//dbg(ctx, "packed buffer size is: %d\n", sbuf->size);
@@ -483,16 +523,16 @@ FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ct
 
 /* FREEQ_EXPORT struct freeq_table_header *freeq_table_header_unref(struct freeq_ctx *ctx, struct freeq_table_header *header) */
 /* { */
-/* 	if (ctx == NULL) */
-/* 		return NULL; */
-/* 	//free(header->tablename); */
-/* 	//free(header->identity); */
-/* 	header->refcount--; */
-/* 	if (header->refcount > 0) */
-/* 		return NULL; */
-/* 	info(ctx, "header %p released\n", header); */
-/* 	free(header); */
-/* 	return NULL; */
+/*	if (ctx == NULL) */
+/*		return NULL; */
+/*	//free(header->tablename); */
+/*	//free(header->identity); */
+/*	header->refcount--; */
+/*	if (header->refcount > 0) */
+/*		return NULL; */
+/*	info(ctx, "header %p released\n", header); */
+/*	free(header); */
+/*	return NULL; */
 /* } */
 
 
@@ -554,7 +594,7 @@ int freeq_unpack_int_array(struct freeq_ctx* ctx, char *buf, size_t bufsize, siz
 		}
 	}
 
-	arr = *vals;
+	arr = (int **)vals;
 	//dbg(ctx, "success\n");
 	msgpack_unpacked_destroy(&obj);
 	return err;
@@ -593,6 +633,7 @@ int freeq_unpack_string_array(struct freeq_ctx* ctx, char *buf, size_t bufsize, 
 		}
 	}
 
+	arr = strings;
 	//dbg(ctx, "all is well, returning %s\n", s);
 	msgpack_unpacked_destroy(&obj);
 	return err;
@@ -611,6 +652,8 @@ FREEQ_EXPORT int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *bu
 	int (* coltypes)[];
 	int numcols;
 	int numents;
+	int minents = -1;
+
 	char *s;
 
 	struct freeq_table *tblp;
@@ -628,13 +671,12 @@ FREEQ_EXPORT int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *bu
 		return res;
 
 	freeq_table_new_from_string(ctx, name, &tblp);
-	if (!tblp)
-	{
+	if (!tblp) {
 		free(name);
 		free(identity);
 		return -ENOMEM;
 	}
-
+	
 	/*
 	  create columns:
 	  the first array in the message contains integers representing the column type
@@ -677,16 +719,16 @@ FREEQ_EXPORT int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *bu
 	/*
 	  unpack column data
 	*/
-
+	if (0) {
 	colp = tblp->columns;
 	while (colp != NULL) {
 		switch (colp->coltype)
 		{
 		case FREEQ_COL_STRING:
-			freeq_unpack_string_array(ctx, buf, bufsize, &offset, &(colp->data), &numents);
+			res = freeq_unpack_string_array(ctx, buf, bufsize, &offset, (char **)&(colp->segments->data), &numents);
 			break;
 		case FREEQ_COL_NUMBER:
-			freeq_unpack_int_array(ctx, buf, bufsize, &offset, &(colp->data), &numents);
+			res = freeq_unpack_int_array(ctx, buf, bufsize, &offset, (int **)&(colp->segments->data), &numents);
 			break;
 		case FREEQ_COL_IPV4ADDR:
 			break;
@@ -695,8 +737,17 @@ FREEQ_EXPORT int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *bu
 		default:
 			break;
 		}
-	}
 
+		colp = colp->next;
+		if (minents < 0)
+			minents = numents;
+		else {
+			if (numents != minents) {
+				dbg(ctx, "ragged table detected!");
+			}
+		}
+	}
+	}
 	/* if (res) { */
 	/*	//dbg(ctx, "failed to unpack column names: %d\n", res); */
 	/*	freeq_table_header_unref(ctx, th); */
@@ -704,7 +755,7 @@ FREEQ_EXPORT int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *bu
 	/* } */
 
 	//dbg(ctx, "success\n");
-
+	tblp->numrows = numents;
 	tblp->identity = identity;
 	tblp->name = name;
 	*table = tblp;

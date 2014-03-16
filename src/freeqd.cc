@@ -61,7 +61,6 @@ int aggregate_table_segments(struct freeq_ctx *ctx, const char *name, table_segm
 	bool consistant = true;
 
 	freeq_table *tbl;
-
 	colprof_t colprof;
 	int numcols = 0;
 	int sumrows = 0;
@@ -88,6 +87,7 @@ int aggregate_table_segments(struct freeq_ctx *ctx, const char *name, table_segm
 			c = c->next;
 			numcols++;
 		}
+		headers.push_back(tbl);
 		dbg(ctx, "segment %s:%s has %d columns\n", tbl->identity, tbl->name, numcols);
 	}
 	
@@ -100,7 +100,6 @@ int aggregate_table_segments(struct freeq_ctx *ctx, const char *name, table_segm
 	}
 	
 	res = freeq_table_new_from_string(ctx, name, &tbl);
-	
 
 }
 
@@ -242,7 +241,7 @@ main (int argc, char *argv[])
   }
 
   struct freeq_ctx *ctx;
-  err = freeq_new(&ctx);
+  err = freeq_new(&ctx, "appname", "identity");
   if (err < 0)
 	  exit(EXIT_FAILURE);
 
