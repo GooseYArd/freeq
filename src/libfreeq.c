@@ -264,6 +264,10 @@ FREEQ_EXPORT struct freeq_table *freeq_table_unref(struct freeq_table *table)
 {
 	if (table == NULL)
 		return NULL;
+
+	if (table->next != NULL)
+		freeq_table_unref(table->next);
+
 	table->refcount--;
 	if (table->refcount > 0)
 		return NULL;
@@ -405,46 +409,6 @@ FREEQ_EXPORT int freeq_table_send(struct freeq_ctx *ctx, struct freeq_table *tab
 	msgpack_sbuffer_destroy(&sbuf);
 }
 
-
-/*
-I could either:
-yeah I think that freeqd should do the concatenation of segments- otherwise
-the aggregator has to do a lot of extra work
-
- */
-/* FREEQ_EXPORT int freeq_repack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ctx *ctx, char *msgs[], int numsegs) */
-/* { */
-/*	int offset; */
-/*	size_t bufsize; */
-/*	msgpack_packer pk; */
-/*	msgpack_packer_init(&pk, sbuf, msgpack_sbuffer_write); */
-
-/*	/\* we know how many rows there are *\/ */
-
-/*	msgpack_unpacked obj; */
-/*	msgpack_unpacked_init(&obj); */
-
-/*	res = freeq_unpack_string(ctx, buf, bufsize, &offset, &identity); */
-/*	if (res) */
-/*		return res; */
-/*	res = freeq_unpack_string(ctx, buf, bufsize, &offset, &name); */
-/*	if (res) */
-/*		return res; */
-
-/*	/\* if (msgpack_unpack_next(&obj, buf, bufsize, &offset)) { *\/ */
-/*	/\*	if (obj.data.type == MSGPACK_OBJECT_ARRAY) { *\/ */
-/*	/\*		numcols = obj.data.via.array.size; *\/ */
-/*	/\*		for (int i=0; i < numcols; i++) { *\/ */
-/*	/\*			err = freeq_table_column_new(tblp, NULL, obj.data.via.array.ptr[i].via.u64, NULL); *\/ */
-/*	/\*			if (err < 0) *\/ */
-/*	/\*				exit(EXIT_FAILURE); *\/ */
-/*	/\*		} *\/ */
-/*	/\*	} else { *\/ */
-/*	/\*		err = 1; *\/ */
-/*	/\*		//dbg(ctx, "object is not an array\n"); *\/ */
-/*	/\*	} *\/ */
-/* } */
-
 FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ctx *ctx, struct freeq_table *table)
 {
 	struct freeq_column *col = table->columns;
@@ -455,7 +419,8 @@ FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ct
 	int len;
 	void *elem;
 
-	dbg(ctx, "freeq_table_pack_msgpack: identity %s table %s %d cols %d rows\n", ctx->identity, table->name, table->numcols, table->numrows);
+	dbg(ctx, "freeq_table_pack_msgpack: identity %s table %s %d cols %d rows\n", \
+	    ctx->identity, table->name, table->numcols, table->numrows);
 
 	if (ctx->identity == NULL)
 	{
@@ -516,25 +481,10 @@ FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ct
 		col = col->next;
 	}
 
-	//dbg(ctx, "packed buffer size is: %d\n", sbuf->size);
+	dbg(ctx, "packed buffer size is: %d\n", sbuf->size);
 	return 0;
 
 }
-
-/* FREEQ_EXPORT struct freeq_table_header *freeq_table_header_unref(struct freeq_ctx *ctx, struct freeq_table_header *header) */
-/* { */
-/*	if (ctx == NULL) */
-/*		return NULL; */
-/*	//free(header->tablename); */
-/*	//free(header->identity); */
-/*	header->refcount--; */
-/*	if (header->refcount > 0) */
-/*		return NULL; */
-/*	info(ctx, "header %p released\n", header); */
-/*	free(header); */
-/*	return NULL; */
-/* } */
-
 
 int freeq_unpack_string(struct freeq_ctx* ctx, char *buf, size_t bufsize, size_t *offset, char **string)
 {
@@ -563,6 +513,22 @@ int freeq_unpack_string(struct freeq_ctx* ctx, char *buf, size_t bufsize, size_t
 	}
 	msgpack_unpacked_destroy(&obj);
 	return res;
+}
+
+int freeq_attach_all_segments(struct freeq_column *from, struct freeq_column *to) {
+	int count = 0;
+	struct freeq_column_segment *tail = to->segments;
+
+	while (tail->next != NULL)
+		tail = tail->next;
+
+	tail->next = from->segments;	
+	tail = from->segments;
+	while (tail != NULL) {
+		count++;
+		tail->refcount++;
+	}
+	return count;
 }
 
 int freeq_unpack_int_array(struct freeq_ctx* ctx, char *buf, size_t bufsize, size_t *offset, int **arr, int *nument)

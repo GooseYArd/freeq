@@ -30,9 +30,7 @@ static const struct option longopts[] = {
 typedef std::string tablename;
 typedef std::string provider;
 
-typedef std::pair<int, char *> msgbuf;
-typedef std::map<provider, msgbuf> table_segments;
-typedef std::map<tablename, table_segments> freeq_generation;
+typedef std::map<tablename, struct freeq_table *> freeq_generation;
 
 static void print_help (void);
 static void print_version (void);
@@ -53,33 +51,23 @@ static void print_version (void);
 
 */
 
-int aggregate_table_segments(struct freeq_ctx *ctx, const char *name, table_segments *ts, freeq_table **table) {
-		
-	std::vector<freeq_table *> headers;
+int aggregate_table_segments(struct freeq_ctx *ctx, const char *name, freeq_table *table) {
+
 	typedef std::pair<std::string, int> colsig_t;
 	typedef std::map<colsig_t, int> colprof_t;
 	bool consistant = true;
-
-	freeq_table *tbl;
+	
+	freeq_table *tbl, *parent, *tail;
 	colprof_t colprof;
 	int numcols = 0;
 	int sumrows = 0;
 	int res;
-	
+
 	dbg(ctx, "aggregating segments for table %s\n", name);
 
-	// first, determine if the column set is uniform among our publishers
-	for (table_segments::iterator it = ts->begin(); it != ts->end(); ++it) {
-		const std::string prov = it->first;
-		const msgbuf mb = it->second;
-		const size_t size = mb.first;
-		char *buf = mb.second;		
-		freeq_table *tbl;
-		//dbg(ctx, "parsing header for provider %s\n", prov.c_str());
-		res = freeq_table_header_from_msgpack(ctx, buf, size, &tbl);
-		
-		sumrows += tbl->numrows;
-		//dbg(ctx, "ok cool, we parsed %d segment headers.\n", headers.size());	
+	tbl = table;
+	while (tbl != NULL) {
+		//dbg(ctx, "ok cool, we parsed %d segment headers.\n", headers.size());
 		freeq_column *c = tbl->columns;
 		numcols = 0;
 		while (c != NULL) {
@@ -87,10 +75,12 @@ int aggregate_table_segments(struct freeq_ctx *ctx, const char *name, table_segm
 			c = c->next;
 			numcols++;
 		}
-		headers.push_back(tbl);
+
+		tail->next = tbl;
+		tail = tail->next;
 		dbg(ctx, "segment %s:%s has %d columns\n", tbl->identity, tbl->name, numcols);
 	}
-	
+
 	for (colprof_t::iterator it = colprof.begin(); it != colprof.end(); ++it) {
 		if (it->second != numcols) {
 			consistant = false;
@@ -98,41 +88,21 @@ int aggregate_table_segments(struct freeq_ctx *ctx, const char *name, table_segm
 			break;
 		}
 	}
-	
-	res = freeq_table_new_from_string(ctx, name, &tbl);
 
-}
+	tbl = parent->next;
+	while (tbl != NULL) {
+		freeq_column *c = tbl->columns;
+		freeq_column *parc = parent->columns;
+		numcols = 0;
+		while (c != NULL) {
+			parent->numrows += freeq_attach_all_segments(c, parc);
+		}
 
-int unpack_table(struct freeq_ctx *ctx, char *buf)
-{
-// for (unsigned int i = 2; i < obj.via.array.size; i++) {
-	//	printf("reading row %d\n", i-2);
-		//	msgpack_object o = obj.via.array.ptr[i];
-		//	printf("ROW SIZE: %d\n", o.via.array.size);
-		//	switch (o.type) {
-		//	case 0:
-		//		//EXPECT_EQ(MSGPACK_OBJECT_NIL, o.type);
-		//		break;
-		//	case 1:
-		//		//EXPECT_EQ(MSGPACK_OBJECT_BOOLEAN, o.type);
-		//		//EXPECT_EQ(true, o.via.boolean);
-		//		break;
-		//	case 2:
-		//		//EXPECT_EQ(MSGPACK_OBJECT_BOOLEAN, o.type);
-		//		//EXPECT_EQ(false, o.via.boolean);
-		//		break;
-		//	case 3:
-		//		printf("INTEGER!!!");
-		//		//EXPECT_EQ(MSGPACK_OBJECT_POSITIVE_INTEGER, o.type);
-		//		//EXPECT_EQ(10, o.via.u64);
-		//		break;
-		//	case 4:
-		//		printf("NEGATIVE INTEGER!!!");
-		//		//EXPECT_EQ(MSGPACK_OBJECT_NEGATIVE_INTEGER, o.type);
-		//		//EXPECT_EQ(-10, o.via.i64);
-		//		break;
-		//	}
-		// }
+	}
+
+	freeq_table_unref(parent->next);
+	// *table = parent;
+	return 0;
 }
 
 int receiver (struct freeq_ctx *ctx, const char *url)
@@ -146,8 +116,7 @@ int receiver (struct freeq_ctx *ctx, const char *url)
 	freeq_generation fg;
 	freeq_generation::iterator it;
 
-	while (1)
-	{
+	while (1) {
 		char *buf = NULL;
 		size_t offset = 0;
 		dbg(ctx, "generation has %d entries\n", fg.size());
@@ -163,34 +132,31 @@ int receiver (struct freeq_ctx *ctx, const char *url)
 		}
 
 		dbg(ctx, "identity: %s name %s\n", table->identity, table->name);
-		
 		freeq_generation::iterator it = fg.find(table->name);
 		if (it == fg.end())
 		{
 			dbg(ctx, "receiver: this is a new table\n");
-			fg[std::string(table->name)][std::string(table->identity)] = msgbuf(size, buf);
+			fg[table->name] = table;
 		} else {
-			table_segments ts = it->second;
-			table_segments::iterator jt = ts.find(table->identity);
-			dbg(ctx, "not a new table\n");
-			if (jt == ts.end()) {
-				dbg(ctx, "provider %s hasn't given us rows for %s\n", table->identity, table->name);
-				fg[table->name][table->identity] = msgbuf(size, buf);
-			} else {
-				dbg(ctx, "provider %s already gave us some rows for %s\n", table->identity, table->name);
-			}
+			struct freeq_table *tmp = it->second;
+			struct freeq_table *tail = NULL;
 			
+			while (tmp != NULL) {
+				if (tmp->identity == table->identity)
+					break;
+				tail = tmp;
+				tmp = tmp->next;
+			}
+
+			/* we don't have a table from this provider */
+			if (tmp == NULL)
+				tail->next = table;
+			else {	
+				dbg(ctx, "generation already contains %s/%s\n", table->name, table->identity);
+			}
+
 		}
-
-		//freeq_table_header_unref(ctx, table);
-
-		for (it = fg.begin(); it != fg.end(); it++) {
-			freeq_table *t;
-			const char *name = it->first.c_str();
-			//res = freeq_table_new_from_string(ctx, it->first.c_str(), &t);
-			res = aggregate_table_segments(ctx, name, &it->second, &t); 
-		}
-
+		nn_freemsg(buf);
 	}
 }
 
