@@ -144,7 +144,6 @@ START_TEST (test_freeq_col_pack_unpack)
 	ck_assert_int_eq(freeq_table_pack_msgpack(&sbuf, ctx, t), 0);	
 	ck_assert_int_eq(freeq_table_header_from_msgpack(ctx, sbuf.data, sbuf.size, &t2), 0);
 
-	
 	msgpack_sbuffer_destroy(&sbuf);
 	freeq_table_unref(t);
 	freeq_table_unref(t2);

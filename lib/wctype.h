@@ -416,7 +416,7 @@ typedef unsigned int rpl_wint_t;
    Linux libc5 has <wctype.h> and the functions but they are broken.
    Assume all 11 functions (all isw* except iswblank) are implemented the
    same way, or not at all.  */
-# if ! 1 || 0
+# if ! 0 || 1
 
 /* IRIX 5.3 has macros but no functions, its isw* macros refer to an
    undefined variable _ctmp_ and to <ctype.h> macros like _P, and they
@@ -439,7 +439,7 @@ typedef unsigned int rpl_wint_t;
 #  undef towupper
 
 /* Linux libc5 has <wctype.h> and the functions but they are broken.  */
-#  if 0
+#  if 1
 #   if !(defined __cplusplus && defined GNULIB_NAMESPACE)
 #    define iswalnum rpl_iswalnum
 #    define iswalpha rpl_iswalpha
@@ -455,7 +455,7 @@ typedef unsigned int rpl_wint_t;
 #    define iswxdigit rpl_iswxdigit
 #   endif
 #  endif
-#  if 0
+#  if 1
 #   if !(defined __cplusplus && defined GNULIB_NAMESPACE)
 #    define towlower rpl_towlower
 #    define towupper rpl_towupper
@@ -463,7 +463,7 @@ typedef unsigned int rpl_wint_t;
 #  endif
 
 _GL_WCTYPE_INLINE int
-#  if 0
+#  if 1
 rpl_iswalnum
 #  else
 iswalnum
@@ -475,7 +475,7 @@ iswalnum
 }
 
 _GL_WCTYPE_INLINE int
-#  if 0
+#  if 1
 rpl_iswalpha
 #  else
 iswalpha
@@ -486,7 +486,7 @@ iswalpha
 }
 
 _GL_WCTYPE_INLINE int
-#  if 0
+#  if 1
 rpl_iswblank
 #  else
 iswblank
@@ -497,7 +497,7 @@ iswblank
 }
 
 _GL_WCTYPE_INLINE int
-#  if 0
+#  if 1
 rpl_iswcntrl
 #  else
 iswcntrl
@@ -508,7 +508,7 @@ iswcntrl
 }
 
 _GL_WCTYPE_INLINE int
-#  if 0
+#  if 1
 rpl_iswdigit
 #  else
 iswdigit
@@ -519,7 +519,7 @@ iswdigit
 }
 
 _GL_WCTYPE_INLINE int
-#  if 0
+#  if 1
 rpl_iswgraph
 #  else
 iswgraph
@@ -530,7 +530,7 @@ iswgraph
 }
 
 _GL_WCTYPE_INLINE int
-#  if 0
+#  if 1
 rpl_iswlower
 #  else
 iswlower
@@ -541,7 +541,7 @@ iswlower
 }
 
 _GL_WCTYPE_INLINE int
-#  if 0
+#  if 1
 rpl_iswprint
 #  else
 iswprint
@@ -552,7 +552,7 @@ iswprint
 }
 
 _GL_WCTYPE_INLINE int
-#  if 0
+#  if 1
 rpl_iswpunct
 #  else
 iswpunct
@@ -565,7 +565,7 @@ iswpunct
 }
 
 _GL_WCTYPE_INLINE int
-#  if 0
+#  if 1
 rpl_iswspace
 #  else
 iswspace
@@ -577,7 +577,7 @@ iswspace
 }
 
 _GL_WCTYPE_INLINE int
-#  if 0
+#  if 1
 rpl_iswupper
 #  else
 iswupper
@@ -588,7 +588,7 @@ iswupper
 }
 
 _GL_WCTYPE_INLINE int
-#  if 0
+#  if 1
 rpl_iswxdigit
 #  else
 iswxdigit
@@ -600,7 +600,7 @@ iswxdigit
 }
 
 _GL_WCTYPE_INLINE wint_t
-#  if 0
+#  if 1
 rpl_towlower
 #  else
 towlower
@@ -611,7 +611,7 @@ towlower
 }
 
 _GL_WCTYPE_INLINE wint_t
-#  if 0
+#  if 1
 rpl_towupper
 #  else
 towupper
@@ -673,7 +673,7 @@ rpl_towupper (wint_t wc)
 # define GNULIB_defined_wctype_functions 1
 #endif
 
-#if 0
+#if 1
 _GL_CXXALIAS_RPL (iswalnum, int, (wint_t wc));
 _GL_CXXALIAS_RPL (iswalpha, int, (wint_t wc));
 _GL_CXXALIAS_RPL (iswcntrl, int, (wint_t wc));
@@ -711,7 +711,7 @@ _GL_CXXALIASWARN (iswupper);
 _GL_CXXALIASWARN (iswxdigit);
 
 #if 0
-# if 0 || 0
+# if 1 || 0
 _GL_CXXALIAS_RPL (iswblank, int, (wint_t wc));
 # else
 _GL_CXXALIAS_SYS (iswblank, int, (wint_t wc));
@@ -758,7 +758,7 @@ _GL_WARN_ON_USE (iswctype, "iswctype is unportable - "
 # endif
 #endif
 
-#if 0 || defined __MINGW32__
+#if 1 || defined __MINGW32__
 _GL_CXXALIAS_RPL (towlower, wint_t, (wint_t wc));
 _GL_CXXALIAS_RPL (towupper, wint_t, (wint_t wc));
 #else

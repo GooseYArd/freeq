@@ -21,3 +21,9 @@ stamp-h?
 *~
 \#*
 .\#*
+src/freeqd
+src/system_monitor
+tests/check_basic
+tests/check_basic.log
+tests/check_basic.trs
+tests/test-suite.log
