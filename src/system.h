@@ -15,8 +15,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef HELLO_SYSTEM_H
-# define HELLO_SYSTEM_H
+#ifndef FREEQ_SYSTEM_H
+# define FREEQ_SYSTEM_H
 
 /* Assume ANSI C89 headers are available.  */
 # include <locale.h>
@@ -41,4 +41,4 @@
 /* Check for errors on write.  */
 # include "closeout.h"
 
-#endif /* HELLO_SYSTEM_H */
+#endif /* FREEQ_SYSTEM_H */
