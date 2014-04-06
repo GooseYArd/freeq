@@ -98,7 +98,6 @@ main (int argc, char *argv[])
 {
   int optc;
   int lose = 0;
-  int err;
   const char *node_name = _("unknown");
 
   set_program_name (argv[0]);
