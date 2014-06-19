@@ -343,7 +343,7 @@ FREEQ_EXPORT int freeq_table_new_from_string(struct freeq_ctx *ctx, const char *
 	return 0;
 }
 
-FREEQ_EXPORT int freeq_table_column_new(struct freeq_table *table, const char *name, freeq_coltype_t coltype, void *data)
+FREEQ_EXPORT int freeq_table_column_new(struct freeq_table *table, const char *name, freeq_coltype_t coltype, void *data, size_t len)
 {
 	struct freeq_column *c;
 	struct freeq_column_segment *seg;
@@ -359,13 +359,17 @@ FREEQ_EXPORT int freeq_table_column_new(struct freeq_table *table, const char *n
 
 	c->name = name;
 	c->refcount = 1;
-	seg->len = table->numrows;
+
+	seg->len = len;
 	seg->data = data;
 	seg->refcount = 1;
 	seg->next = NULL;
+
 	c->segments = seg;
 	c->coltype = coltype;
+
 	table->numcols++;
+	table->numrows = len;
 
 	struct freeq_column *lastcol = table->columns;
 
@@ -422,6 +426,7 @@ FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ct
 	dbg(ctx, "freeq_table_pack_msgpack: identity %s table %s %d cols %d rows\n", \
 	    ctx->identity, table->name, table->numcols, table->numrows);
 
+	printf("PACKED LENGTH: %d\n", table->numrows);
 	msgpack_pack_int(&pk, table->numrows);
 
 	if (ctx->identity == NULL)
@@ -649,6 +654,8 @@ FREEQ_EXPORT int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *bu
 	if (res)
 		return res;
 
+	printf("NUMROWS: %d\n", numrows);
+
 	res = freeq_unpack_string(ctx, buf, bufsize, &offset, &identity);
 	if (res)
 		return res;
@@ -672,7 +679,7 @@ FREEQ_EXPORT int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *bu
 		if (obj.data.type == MSGPACK_OBJECT_ARRAY) {
 			numcols = obj.data.via.array.size;
 			for (int i=0; i < numcols; i++) {
-				err = freeq_table_column_new(tblp, NULL, obj.data.via.array.ptr[i].via.u64, NULL);
+				err = freeq_table_column_new(tblp, NULL, obj.data.via.array.ptr[i].via.u64, NULL, 0);
 				if (err < 0)
 					exit(EXIT_FAILURE);
 			}
@@ -744,6 +751,7 @@ FREEQ_EXPORT int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *bu
 	/* } */
 
 	//dbg(ctx, "success\n");
+
 	tblp->numrows = numrows;
 	tblp->identity = identity;
 	tblp->name = name;

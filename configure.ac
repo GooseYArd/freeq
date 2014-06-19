@@ -19,7 +19,7 @@ AC_CONFIG_MACRO_DIR([m4])
 
 dnl Where to generate output; srcdir location.
 AC_CONFIG_HEADERS([config.h:config.in])dnl Keep filename to 8.3 for MS-DOS.
-AC_CONFIG_SRCDIR([src/freeq.c])
+AC_CONFIG_SRCDIR([src/libfreeq.c])
 
 dnl AC_PROG_CC
 AC_PROG_CC_C99

@@ -91,7 +91,7 @@ struct freeq_table {
 	struct freeq_table *next;
 };
 
-int freeq_table_column_new(struct freeq_table *table, const char *name, freeq_coltype_t coltype, void *data);
+int freeq_table_column_new(struct freeq_table *table, const char *name, freeq_coltype_t coltype, void *data, size_t len);
 int freeq_attach_all_segments(struct freeq_column *from, struct freeq_column *to);
 struct freeq_column *freeq_column_get_next(struct freeq_column *column);
 struct freeq_column *freeq_column_unref(struct freeq_column *column);

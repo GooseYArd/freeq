@@ -1,1 +1,10 @@
-./configure --prefix=/home/rbailey/src/install --with-sqlite4=/home/rbailey/src/sqlite4 CXXFLAGS="-g -O0 -g -O0 -I/home/rbailey/src/install/include" CFLAGS="-g -O0 -I/home/rbailey/src/install/include" LDFLAGS=-L/home/rbailey/src/install/lib CPPFLAGS=-I/home/rbailey/src/install/include PKG_CONFIG_PATH=/home/rbailey/src/install/lib/pkgconfig
+SRC=$HOME/src
+INST=$SRC/install
+./configure \
+    --prefix=$INST \
+    --with-sqlite4=$SRC/sqlite4 \
+    CXXFLAGS="-g -Werror -Wunused -O0 -g -O0 -I$INST/include" \
+    CFLAGS="-Werror -Wunused -std=gnu99 -g -O0 -I$INST/include" \
+    LDFLAGS=-L$INST/lib \
+    CPPFLAGS=-I$INST/include \
+    PKG_CONFIG_PATH=$INST/lib/pkgconfig
