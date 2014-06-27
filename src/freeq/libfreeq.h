@@ -58,6 +58,7 @@ void freeq_set_identity(struct freeq_ctx *ctx, const char *identity);
 
 typedef enum 
 {
+	FREEQ_COL_NULL,
 	FREEQ_COL_STRING, 
 	FREEQ_COL_NUMBER, 
 	FREEQ_COL_TIME,
@@ -92,6 +93,7 @@ struct freeq_table {
 };
 
 int freeq_table_column_new(struct freeq_table *table, const char *name, freeq_coltype_t coltype, void *data, size_t len);
+int freeq_table_column_new_empty(struct freeq_table *table, const char *name, freeq_coltype_t coltype, struct freeq_column **colp, size_t len);
 int freeq_attach_all_segments(struct freeq_column *from, struct freeq_column *to);
 struct freeq_column *freeq_column_get_next(struct freeq_column *column);
 struct freeq_column *freeq_column_unref(struct freeq_column *column);

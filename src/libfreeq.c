@@ -384,6 +384,63 @@ FREEQ_EXPORT int freeq_table_column_new(struct freeq_table *table, const char *n
 	return 0;
 }
 
+FREEQ_EXPORT int freeq_table_column_new_empty(struct freeq_table *table, 
+					      const char *name, 
+					      freeq_coltype_t coltype, 					      
+					      struct freeq_column **colp,
+					      size_t len)
+{
+	struct freeq_column *c;
+	struct freeq_column_segment *seg;
+	c = calloc(1, sizeof(struct freeq_column));
+	if (!c)
+		return -ENOMEM;
+
+	seg = calloc(1, sizeof(struct freeq_column_segment));
+	if (!seg) {
+		free(c);
+		return -ENOMEM;
+	}
+
+	c->name = name;
+	c->refcount = 1;
+	seg->len = len;
+
+	switch (coltype) {
+	case FREEQ_COL_STRING:
+		seg->data = calloc(sizeof(char*), len);
+		break;
+	case FREEQ_COL_NUMBER:
+		seg->data = calloc(sizeof(int), len);
+		break;
+	default:
+		break;
+	}
+
+	seg->refcount = 1;
+	seg->next = NULL;
+
+	c->segments = seg;
+	c->coltype = coltype;
+
+	table->numcols++;
+	table->numrows = len;
+
+	struct freeq_column *lastcol = table->columns;
+
+	if (lastcol == NULL)
+		table->columns = c;
+	else
+	{
+		while (lastcol->next != NULL)
+			lastcol = lastcol->next;
+		lastcol->next = c;
+	}
+	*colp = c;
+	return 0;
+}
+
+
 FREEQ_EXPORT struct freeq_column *freeq_table_get_some_column(struct freeq_table *table)
 {
 	return NULL;
