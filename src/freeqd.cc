@@ -491,10 +491,8 @@ void* handler(void *paramsd) {
         sqlite4_stmt *pStmt;
         socklen_t addr_len;
         const char *errmsg;
-
-        int segment_size = 256;
-        int seg_i;
-
+        int segment_size = 10;
+        
         client_local = *((int *)paramsd);
         addr_len = sizeof(cliAddr);
 
@@ -517,9 +515,6 @@ void* handler(void *paramsd) {
                         continue;
                 }
 
-                fprintf(stderr, "RESULT FROM PREPARE: %d\n", res);
-                fprintf(stderr, "error message after prepare: %s\n", sqlite4_errmsg(pDb));
-
                 res = freeq_new(&ctx, "appname", "identity");
                 if (res) {
                         dbg(ctx, "unable to create freeq context");
@@ -528,23 +523,13 @@ void* handler(void *paramsd) {
 
                 freeq_table_new_from_string(ctx, "result", &tblp);
                 if (!tblp) {
+                        freeq_unref(ctx);
                         return NULL;
                         //return -ENOMEM;
                 }
-
-                // TODO: the smart thing to do here would be to pack
-                // and send multiple tables, where the rowlen of the
-                // table doesn't exceed some buffer size. Initially I
-                // thought I should just send the header, and then
-                // encode and send segments individually, but the
-                // problem is that the header presently includes a
-                // rowlen field. I'm not sure if we need rowlen in the
-                // header though.  If we _do_ need rowlen in the
-                // header, we can pack and send a table every n rows
-                // and have a flag in the header that says to expect
-                // another table.
-
+                
                 int numcols = sqlite4_column_count(pStmt);
+                int j = 0;
                 for (int i = 0; i < numcols; i++) {
                         freeq_coltype_t ctype = sqlite_to_freeq_coltype[sqlite4_column_type(pStmt, i)];
                         const char *cname = sqlite4_column_name(pStmt, i);
@@ -554,14 +539,14 @@ void* handler(void *paramsd) {
                 }
 
                 while (sqlite4_step(pStmt) == SQLITE4_ROW) {
-                        if (seg_i >= segment_size) {
-                                // pack and send table, flag continuation
-                                //send(client_local, "ok\n", 3, 0);
+                        if (j >= segment_size) {
+                                // pack and send table, flag continuation                                
+                                send(client_local, "segment\n", 8, 0);
                                 tblp->numrows = 0;
+                                j = 0;
                         }
 
                         colp = tblp->columns;
-                        tblp->numrows++;
                         for (int i = 0; i < numcols; i++) {
                                 seg = colp->segments;
                                 seg->len = tblp->numrows;
@@ -569,27 +554,29 @@ void* handler(void *paramsd) {
                                 case FREEQ_COL_STRING:
                                         strings = (char **)seg->data;
                                         s = sqlite4_column_text(pStmt, i, &bsize);
-                                        strings[i] = strndup(s, bsize);
+                                        strings[j] = strndup(s, bsize);
                                         break;
                                 case FREEQ_COL_NUMBER:
                                         vals = (int *)seg->data;
-                                        vals[i] = sqlite4_column_int(pStmt, i);
+                                        vals[j] = sqlite4_column_int(pStmt, i);
                                         break;
                                 default:
                                         break;
                                 }
                                 colp = colp->next;
                         }
-                        seg_i++;
+                        j++;
                 }
 
-                // pack and send table, flag no continuation
-                freeq_table_unref(tblp);
-
                 sqlite4_finalize(pStmt);
-                std::cout << "RAN statement " << line << " response was " << res << std::endl;
+                // pack and send table, flag no continuation
+                
+                
                 send(client_local, "ok\n", 3, 0);
                 memset(line,0,MAX_MSG);
+
+                freeq_table_unref(tblp);
+
         }
         close(client_local);
 }
@@ -642,7 +629,6 @@ void *sqlserver(void *arg) {
         exit(0);
 }
 
-
 int
 main (int argc, char *argv[])
 {
@@ -656,6 +642,7 @@ main (int argc, char *argv[])
   pthread_t t_receiver;
   pthread_t t_monitor;
   pthread_t t_sqlserver;
+  pthread_t t_sqlserver_text;
 
   struct receiver_info ri;
   set_program_name(argv[0]);
@@ -726,24 +713,20 @@ main (int argc, char *argv[])
   pthread_create(&t_receiver, 0, &receiver, (void *)&ri);
   pthread_create(&t_sqlserver, 0, &sqlserver, (void *)&ri);
 
-  if (sqlite4_exec(pDb, "create table if not exists poop(int last);", log_monitor, NULL) != SQLITE4_DONE) {
-          printf("creating poop failed: %s\n", sqlite4_errmsg(pDb));
-  } else {
-          printf("made poope ok\n");
+  res = sqlite4_exec(pDb, "create table if not exists freeq_stats(int last);", log_monitor, NULL);
+          
+  if (res != SQLITE4_DONE) {
+          printf("creating freeq_stats failed: %d %s\n", sqlite4_errmsg(pDb));
   }
-
+ 
   while (!recvstop) {
-
-          printf("running schema dump\n");
-
-          if (sqlite4_exec(pDb, "insert into poop values(1) ;", log_monitor, NULL) != SQLITE4_DONE) {
-                  printf("execute failed: %s\n", sqlite4_errmsg(pDb));
-          }
+          //printf("running schema dump\n");
+          //if (sqlite4_exec(pDb, "insert into poop values(1) ;", log_monitor, NULL) != SQLITE4_DONE) {
+          //        printf("execute failed: %s\n", sqlite4_errmsg(pDb));
+          //}
 
           sleep(5);
   }
-
-  /* sqlserver(); */
 
   //return receiver(ctx, "ipc:///tmp/freeqd.ipc", pDb);
 //  freeq_unref(&ctx);

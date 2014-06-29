@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-bin_PROGRAMS = freeqd system_monitor
+bin_PROGRAMS = freeqd system_monitor freeql
 
 lib_LTLIBRARIES = libfreeq-1.0.la
 libfreeq_1_0_la_SOURCES = libfreeq.c
@@ -24,10 +24,12 @@ libfreeq_1_0_la_SOURCES = libfreeq.c
 libfreeq_1_0_la_LIBADD = $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(PROCPS_LIBS)
 
 freeqd_SOURCES = freeqd.cc system.h
+freeql_SOURCES = freeql.cc system.h
 system_monitor_SOURCES = system_monitor.cc system.h
 
 system_monitor_LDADD = $(LIBINTL) $(top_builddir)/lib/libgnu.a libfreeq-1.0.la $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(PROCPS_LIBS)
 freeqd_LDADD = $(LIBINTL) $(top_builddir)/lib/libgnu.a libfreeq-1.0.la $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(SQLITE4_LDFLAGS)
+freeql_LDADD = $(LIBINTL) $(top_builddir)/lib/libgnu.a libfreeq-1.0.la 
 
 localedir = $(datadir)/locale
 
