@@ -454,22 +454,46 @@ FREEQ_EXPORT int freeq_table_send(struct freeq_ctx *ctx, struct freeq_table *tab
 	table->identity = ctx->identity;
 	res = freeq_table_pack_msgpack(&sbuf, ctx, table);
 
-	printf("freeq_table_send: table pack returned %d\n", res);
+	dbg(ctx, "freeq_table_send: table pack returned %d\n", res);
 
 	if (res == 0) {
 		const char *url = "ipc:///tmp/freeqd.ipc";
 		int sock = nn_socket(AF_SP, NN_PUSH);
 		assert(sock >= 0);
 		assert(nn_connect(sock, url) >= 0);
-		printf("sending \"%d\" btyes to %s\n", sbuf.size, url);
+		dbg(ctx, "sending \"%d\" btyes to %s\n", sbuf.size, url);
 		int bytes = nn_send(sock, sbuf.data, sbuf.size, 0);
-		printf("sent \"%d\" btyes\n", bytes);
+		dbg(ctx, "sent \"%d\" btyes\n", bytes);
 		assert(bytes == sbuf.size);
 		nn_shutdown(sock, 0);
 	}
 
 	msgpack_sbuffer_destroy(&sbuf);
 }
+
+FREEQ_EXPORT int freeq_table_write_sock(struct freeq_ctx *ctx, struct freeq_table *table, int sock)
+{
+	msgpack_sbuffer sbuf;
+	int res;
+	int nbytes;
+	msgpack_sbuffer_init(&sbuf);
+	table->identity = ctx->identity;
+	res = freeq_table_pack_msgpack(&sbuf, ctx, table);
+	dbg(ctx, "freeq_table_send: table pack returned %d\n", res);
+
+	if (res == 0) 
+	{
+		dbg(ctx, "sending \"%d\" btyes to socket %d\n", sbuf.size, sock);
+		nbytes = write(sock, sbuf.data, sbuf.size);
+		if (nbytes < 0)
+		{
+			dbg(ctx, "error writing to socket\n");
+
+		}
+	}
+	msgpack_sbuffer_destroy(&sbuf);
+}
+
 
 FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ctx *ctx, struct freeq_table *table)
 {
@@ -483,7 +507,6 @@ FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ct
 	dbg(ctx, "freeq_table_pack_msgpack: identity %s table %s %d cols %d rows\n", \
 	    ctx->identity, table->name, table->numcols, table->numrows);
 
-	printf("PACKED LENGTH: %d\n", table->numrows);
 	msgpack_pack_int(&pk, table->numrows);
 
 	if (ctx->identity == NULL)
@@ -657,25 +680,19 @@ int freeq_unpack_string_array(struct freeq_ctx* ctx, char *buf, size_t bufsize, 
 	msgpack_unpacked obj;
 	msgpack_unpacked_init(&obj);
 
-	//dbg(ctx, "trying to unpack an array of strings\n");
 	if (msgpack_unpack_next(&obj, buf, bufsize, offset)) {
 		if (obj.data.type == MSGPACK_OBJECT_ARRAY) {
-			//dbg(ctx, "type is good\n");
 			colp->segments->len = obj.data.via.array.size;
 			strings = (char **)calloc(sizeof(char*), colp->segments->len);
 			if (!strings) {
 				err = -ENOMEM;
 			} else {
-				//dbg(ctx, "allocated an array of size %d\n", colp->segments->len);
 				for (int i=0; i < obj.data.via.array.size; i++) {
 					bsize = obj.data.via.array.ptr[i].via.raw.size;
 					s = (char *)calloc(bsize+1, 1);
 					memcpy((void *)s, obj.data.via.array.ptr[i].via.raw.ptr, bsize);
 					strings[i] = s;
-					//printf("STRING IS: %s, bsize was %d\n", strings[i], bsize);
 				}
-
-
 			}
 		} else {
 			err = 1;
@@ -710,8 +727,6 @@ FREEQ_EXPORT int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *bu
 	res = freeq_unpack_int(ctx, buf, bufsize, &offset, &numrows);
 	if (res)
 		return res;
-
-	printf("NUMROWS: %d\n", numrows);
 
 	res = freeq_unpack_string(ctx, buf, bufsize, &offset, &identity);
 	if (res)
@@ -791,15 +806,10 @@ FREEQ_EXPORT int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *bu
 		default:
 			break;
 		}
-		printf("address of column %s's segment is: %p\n", colp->name, colp->segments->data);
 		colp = colp->next;
 	}
 
 	colp = tblp->columns;
-	while (colp != NULL) {
-		dbg(ctx, "AFTER THE MESS @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ %s\n", colp->name);
-		colp = colp->next;
-	}
 
 	/* if (res) { */
 	/*	//dbg(ctx, "failed to unpack column names: %d\n", res); */

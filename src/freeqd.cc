@@ -60,19 +60,6 @@ static const struct option longopts[] = {
         {NULL, 0, NULL, 0}
 };
 
-static
-int callback(void *NotUsed, int argc, sqlite4_value **argv, const char **azColName)
-{
-        int i;
-        fprintf(stderr, "IN CALLBACK...\n");
-        for (i = 0; i < argc; i++) {
-                /* printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL"); */
-                printf("%s\n", azColName[i]);
-        }
-        printf("\n");
-        return 0;
-}
-
 typedef std::string tablename;
 typedef std::string provider;
 typedef std::map<tablename, struct freeq_table *> freeq_generation;
@@ -155,16 +142,16 @@ int drop_table(struct freeq_table *tbl, sqlite4 *mDb)
                 fprintf(stderr, "failed to allocate buffer for drop table");
                 return -ENOMEM;
         }
-        res = sqlite4_exec(mDb, drop_cmd, callback, NULL);
+        res = sqlite4_exec(mDb, drop_cmd, NULL, NULL);
         free(drop_cmd);
         return res;
 }
 
-int create_table(struct freeq_table *tbl, sqlite4 *mDb)
+int create_table(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 {
         std::stringstream stm;
         struct freeq_column *col = tbl->columns;
-        stm << "CREATE TABLE " << tbl->name << "(";
+        stm << "CREATE TABLE IF NOT EXISTS " << tbl->name << "(";
         while (col != NULL) {
                 stm << col->name << " " << freeq_sqlite_typexpr[col->coltype];
                 col = col->next;
@@ -172,11 +159,11 @@ int create_table(struct freeq_table *tbl, sqlite4 *mDb)
                         stm << ", ";
         }
         stm << ");";
-        fprintf(stderr, "%s\n", stm.str().c_str());
-        return sqlite4_exec(mDb, stm.str().c_str(), callback, NULL);
+        dbg(ctx, "%s\n", stm.str().c_str());
+        return sqlite4_exec(mDb, stm.str().c_str(), NULL, NULL);
 }
 
-int statement(struct freeq_table *tbl, sqlite4 *mDb, sqlite4_stmt **stmt)
+int statement(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb, sqlite4_stmt **stmt)
 {
         sqlite4_stmt *s;
         std::stringstream stm;
@@ -187,7 +174,7 @@ int statement(struct freeq_table *tbl, sqlite4 *mDb, sqlite4_stmt **stmt)
                 stm << "?" << i << ", ";
         }
         stm << "?" << tbl->numcols << ");";
-        fprintf(stderr, "STATEMENT: %s\n", (char *)stm.str().c_str());
+        dbg(ctx, "statement: %s\n", (char *)stm.str().c_str());
         res = sqlite4_prepare(mDb, stm.str().c_str(), stm.str().size(), &s, NULL);
         if (res == SQLITE4_OK) {
                 *stmt = s;
@@ -197,34 +184,33 @@ int statement(struct freeq_table *tbl, sqlite4 *mDb, sqlite4_stmt **stmt)
 }
 
 int to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
-{
-        //int len;
+{        
         sqlite4_stmt *stmt;
         const char **strarrp = NULL;
         int *intarrp = NULL;
         struct freeq_column *colp;
         int res;
-
-        sqlite4_exec(mDb, "BEGIN TRANSACTION;", callback, NULL);
-
-        if (drop_table(tbl, mDb) != SQLITE4_OK) {
-                fprintf(stderr, "failed to drop table, ignoring");
-                //sqlite4_exec(mDb, "ROLLBACK;", callback, NULL);
-                //return 1;
-        }
-
-        if (create_table(tbl, mDb) != SQLITE4_OK) {
-                fprintf(stderr, "failed to create table, rolling back");
-                sqlite4_exec(mDb, "ROLLBACK;", callback, NULL);
+        
+        if (sqlite4_exec(mDb, "BEGIN TRANSACTION;", NULL, NULL) != SQLITE4_OK) {
+                dbg(ctx, "unable to start transaction\n");
                 return 1;
         }
 
-        if ((res = statement(tbl, mDb, &stmt)) != SQLITE4_OK) {
-                fprintf(stderr, "failed to create statement (%d), rolling back", res);
-                sqlite4_exec(mDb, "ROLLBACK;", callback, NULL);
+        if (drop_table(tbl, mDb) != SQLITE4_OK)
+                dbg(ctx, "failed to drop table, ignoring");
+                
+        if (create_table(ctx, tbl, mDb) != SQLITE4_OK) {
+                dbg(ctx, "failed to create table, rolling back");
+                sqlite4_exec(mDb, "ROLLBACK;", NULL, NULL);
                 return 1;
         }
 
+        if ((res = statement(ctx, tbl, mDb, &stmt)) != SQLITE4_OK) {
+                dbg(ctx, "failed to create statement (%d), rolling back", res);
+                sqlite4_exec(mDb, "ROLLBACK;", NULL, NULL);
+                return 1;
+        }
+        
         for (unsigned i = 0; i < tbl->numrows; i++)
         {
                 colp = tbl->columns;
@@ -239,13 +225,13 @@ int to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
                         case FREEQ_COL_STRING:
                                 sqlite4_bind_text(stmt, j, strarrp[i], strlen(strarrp[i]), SQLITE4_TRANSIENT, NULL);
                                 if (res != SQLITE4_OK) {
-                                        fprintf(stderr, "failed bind: %s", sqlite4_errmsg(mDb));
+                                        dbg(ctx, "failed bind: %s", sqlite4_errmsg(mDb));
                                 }
                                 break;
                         case FREEQ_COL_NUMBER:
                                 res = sqlite4_bind_int(stmt, j, intarrp[i]);
                                 if (res != SQLITE4_OK) {
-                                        fprintf(stderr, "failed bind: %s", sqlite4_errmsg(mDb));
+                                        dbg(ctx, "failed bind: %s", sqlite4_errmsg(mDb));
                                 }
                                 break;
                         default:
@@ -256,8 +242,8 @@ int to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
                 }
                 if (sqlite4_step(stmt) != SQLITE4_DONE)
                 {
-                        std::cout << "execute failed" << std::endl;
-                        sqlite4_exec(mDb, "ROLLBACK;", callback, NULL);
+                        dbg(ctx, "execute failed: %s\n", sqlite4_errmsg(mDb));
+                        sqlite4_exec(mDb, "ROLLBACK;", NULL, NULL);
                         sqlite4_finalize(stmt);
                         return -1;
                 } else {
@@ -265,9 +251,9 @@ int to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
                 }
         }
 
-        std::cout << "committing transaction" << std::endl;
-        res = sqlite4_exec(mDb, "COMMIT TRANSACTION;", callback, NULL);
-        std::cout << "result of commit was " << res << std::endl;
+        dbg(ctx, "committing transaction\n");
+        res = sqlite4_exec(mDb, "COMMIT TRANSACTION;", NULL, NULL);
+        dbg(ctx, "result of commit was %d\n", res);
         sqlite4_finalize(stmt);
 }
 
@@ -275,7 +261,6 @@ int to_text(struct freeq_ctx *ctx, struct freeq_table *tbl)
 {
         const char **strarrp = NULL;
         int *intarrp = NULL;
-
         struct freeq_column_segment *seg;
 
         struct freeq_column *colp = tbl->columns;
@@ -442,13 +427,14 @@ int readline(int fd, char *str, int maxlen)
         int n;
         int readcount;
         char c;
-
+        fprintf(stderr, "READLINE: ");
         for (n = 1; n < maxlen; n++) {
                 readcount = read(fd, &c, 1);
                 if (readcount == 1)
                 {
                         *str = c;
                         str++;
+                        fprintf(stderr, "%c", c);                                        
                         if (c == '\n')
                                 break;
                 }
@@ -462,14 +448,21 @@ int readline(int fd, char *str, int maxlen)
                 else
                         return (-1);
         }
+        fprintf(stderr, "%s", str);
         *str=0;
         return (n);
 }
 
 int readnf (int fd, char *line)
 {
+        fprintf(stderr, "in readnf...\n");
         if (readline(fd, line, MAX_MSG) < 0)
+        {
+                fprintf(stderr, "in readnf, returning error\n");
                 return ERROR;
+        }
+
+        fprintf(stderr, "in readnf, returning success\n");
         return SUCCESS;
 }
 
@@ -491,7 +484,7 @@ void* handler(void *paramsd) {
         sqlite4_stmt *pStmt;
         socklen_t addr_len;
         const char *errmsg;
-        int segment_size = 10;
+        int segment_size = 2000;
         
         client_local = *((int *)paramsd);
         addr_len = sizeof(cliAddr);
@@ -499,35 +492,40 @@ void* handler(void *paramsd) {
         getpeername(client_local, (struct sockaddr*)&cliAddr, &addr_len);
         memset(line, 0, MAX_MSG);
 
+        res = freeq_new(&ctx, "freeqd_handler", "identity");
+        freeq_set_log_priority(ctx, 10);
+        if (res) {
+                dbg(ctx, "unable to create freeq context");
+                return NULL;
+        }
+        
+        dbg(ctx, "handler invoked, let's see if we read anything\n");
+
         while(!recvstop && readnf(client_local, line) != ERROR)
         {
                 //strcpy(reply, "You:");
                 //strcat(reply, line);
                 //send(client_local, "executing", 10, 0);
-                //res = sqlite4_exec(pDb, line, callback, NULL);
-                //sqlite4_exec(pDb, "BEGIN TRANSACTION;", callback, NULL);
+                dbg(ctx, "received query from client: %s", line);
 
                 res = sqlite4_prepare(pDb, line, -1, &pStmt, 0);
                 if (res != SQLITE4_OK) {
                         errmsg = sqlite4_errmsg(pDb);
                         send(client_local, errmsg, strlen(errmsg), 0);
+                        dbg(ctx, "failed to prepare statement: %s", errmsg);
                         sqlite4_finalize(pStmt);
                         continue;
                 }
 
-                res = freeq_new(&ctx, "appname", "identity");
-                if (res) {
-                        dbg(ctx, "unable to create freeq context");
-                        return NULL;
-                }
-
                 freeq_table_new_from_string(ctx, "result", &tblp);
                 if (!tblp) {
+                        dbg(ctx, "unable to allocate table");
                         freeq_unref(ctx);
                         return NULL;
                         //return -ENOMEM;
                 }
                 
+                dbg(ctx, "creating response table");
                 int numcols = sqlite4_column_count(pStmt);
                 int j = 0;
                 for (int i = 0; i < numcols; i++) {
@@ -535,17 +533,20 @@ void* handler(void *paramsd) {
                         const char *cname = sqlite4_column_name(pStmt, i);
                         res = freeq_table_column_new_empty(tblp, cname, ctype, &colp, segment_size);
                         if (res < 0)
+                        {
+                                dbg(ctx, "unable to allocate column");
                                 exit(EXIT_FAILURE);
+                        }
                 }
 
                 while (sqlite4_step(pStmt) == SQLITE4_ROW) {
                         if (j >= segment_size) {
                                 // pack and send table, flag continuation                                
-                                send(client_local, "segment\n", 8, 0);
+                                //send(client_local, "segment\n", 8, 0);
                                 tblp->numrows = 0;
                                 j = 0;
                         }
-
+                        
                         colp = tblp->columns;
                         for (int i = 0; i < numcols; i++) {
                                 seg = colp->segments;
@@ -570,14 +571,14 @@ void* handler(void *paramsd) {
 
                 sqlite4_finalize(pStmt);
                 // pack and send table, flag no continuation
-                
-                
+                //freeq_table_write_sock(ctx, tblp, client_local);
+                dbg(ctx, "sending result");                
                 send(client_local, "ok\n", 3, 0);
-                memset(line,0,MAX_MSG);
-
+                memset(line, 0, MAX_MSG);
                 freeq_table_unref(tblp);
 
         }
+        freeq_unref(ctx);
         close(client_local);
 }
 
@@ -585,19 +586,28 @@ void* handler(void *paramsd) {
 void *sqlserver(void *arg) {
 
         int client;
+        int optval;
+        int err;
         socklen_t addr_len;
         pthread_t thread;
 
         struct sockaddr_in cliAddr;
         struct sockaddr_in servAddr;
+        struct freeq_ctx *ctx;
+        err = freeq_new(&ctx, "appname", "identity");
+        if (err < 0)
+                exit(EXIT_FAILURE);
+
+        freeq_set_log_priority(ctx, 10);
 
         signal(SIGINT, cleanup);
         signal(SIGTERM, cleanup);
+        signal(SIGPIPE, SIG_IGN);
 
         server = socket(PF_INET, SOCK_STREAM, 0);
         if (server < 0) {
-                perror("cannot open socket ");
-//		return ERROR;
+                dbg(ctx, "cannot open socket ");
+                freeq_unref(ctx);
                 return NULL;
         }
 
@@ -605,10 +615,13 @@ void *sqlserver(void *arg) {
         servAddr.sin_addr.s_addr = htonl(INADDR_ANY);
         servAddr.sin_port = htons(SERVER_PORT);
         memset(servAddr.sin_zero, 0, 8);
+        optval = 1;
 
+        setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval);
+        
         if (bind(server, (struct sockaddr *) &servAddr, sizeof(struct sockaddr)) < 0) {
-                perror("cannot bind port ");
-//		return ERROR;
+                dbg(ctx, "cannot bind port ");
+                freeq_unref(ctx);
                 return NULL;
         }
 
@@ -616,16 +629,17 @@ void *sqlserver(void *arg) {
 
         while (!recvstop)
         {
-                printf("waiting for data on port TCP %u\n", SERVER_PORT);
+                dbg(ctx, "waiting for data on port %u\n", SERVER_PORT);
                 addr_len = sizeof(cliAddr);
                 client = accept(server, (struct sockaddr *) &cliAddr, &addr_len);
                 if (client < 0) {
-                        perror("cannot accept connection ");
+                        dbg(ctx, "cannot accept connection ");
                         break;
                 }
                 pthread_create(&thread, 0, &handler, &client);
         }
         close(server);
+        freeq_unref(ctx);
         exit(0);
 }
 
@@ -642,7 +656,6 @@ main (int argc, char *argv[])
   pthread_t t_receiver;
   pthread_t t_monitor;
   pthread_t t_sqlserver;
-  pthread_t t_sqlserver_text;
 
   struct receiver_info ri;
   set_program_name(argv[0]);
@@ -714,9 +727,9 @@ main (int argc, char *argv[])
   pthread_create(&t_sqlserver, 0, &sqlserver, (void *)&ri);
 
   res = sqlite4_exec(pDb, "create table if not exists freeq_stats(int last);", log_monitor, NULL);
-          
-  if (res != SQLITE4_DONE) {
-          printf("creating freeq_stats failed: %d %s\n", sqlite4_errmsg(pDb));
+  
+  if (res != SQLITE4_OK) {
+          printf("creating freeq_stats failed: %d %s\n", res, sqlite4_errmsg(pDb));
   }
  
   while (!recvstop) {

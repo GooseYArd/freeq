@@ -45,8 +45,10 @@ main (int argc, char *argv[])
 {
   int optc;
   int lose = 0;
+  int nbytes;
+  char buf[2000];
   const char *node_name = _("localhost");
-  const char *sql;
+  char *sql;
   
   set_program_name (argv[0]);
   setlocale (LC_ALL, "");
@@ -85,11 +87,9 @@ main (int argc, char *argv[])
     exit (EXIT_FAILURE);
   }
   
-  sql = argv[1];
   int sock;
   struct sockaddr_in servername;
 
-  /* Create the socket. */
   sock = socket(PF_INET, SOCK_STREAM, 0);
   if (sock < 0)
   {
@@ -97,24 +97,37 @@ main (int argc, char *argv[])
     exit(EXIT_FAILURE);
   }
 
-  /* Connect to the server. */
   init_sockaddr(&servername, node_name, 13000);
-  if (0 > connect (sock,
-                   (struct sockaddr *) &servername,
-                   sizeof (servername)))
+  if (0 > connect(sock,
+                  (struct sockaddr *) &servername,
+                  sizeof (servername)))
   {
     perror("connect (client)");
     exit(EXIT_FAILURE);
   }
+  
+  puts("sending query...\n");  
+  asprintf(&sql, "%s\r\n", argv[1]);
+  //printf("STATEMENT: %s", sql);
 
-  int nbytes;  
-  nbytes = write(sock, sql, strlen("sql") + 1);
+  nbytes = write(sock, sql, strlen(sql) + 1);
   if (nbytes < 0)
   {
     perror ("write");
     exit (EXIT_FAILURE);
   }
+  free(sql);
   
+  puts("waiting for response...\n");
+  nbytes = recv(sock, (void *)buf , 2000, 0);
+  if(nbytes < 0)
+  {
+    perror("recv failed");
+  }
+
+  printf("Read %d bytes from server\n", nbytes);
+  puts(buf);
+    
   close (sock);
   exit (EXIT_SUCCESS);
 
