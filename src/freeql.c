@@ -9,8 +9,7 @@
 
 #include <netdb.h>
 #include "freeq/libfreeq.h"
-
-#define DEBUG(X) fprintf(stderr, _("DEBUG: %s\n"), X);
+#include "libfreeq-private.h"
 
 static const struct option longopts[] = {
 	{"nodename", required_argument, NULL, 'n'},
@@ -46,16 +45,21 @@ main (int argc, char *argv[])
   int optc;
   int lose = 0;
   int nbytes;
+  int err;
   char buf[2000];
   const char *node_name = _("localhost");
   char *sql;
-  
-  set_program_name (argv[0]);
-  setlocale (LC_ALL, "");
+  struct freeq_ctx *ctx;
+  struct freeq_table *table;
+  int sock;
+  struct sockaddr_in servername;
+
+  set_program_name(argv[0]);
+  setlocale(LC_ALL, "");
 
 #if ENABLE_NLS
-  bindtextdomain (PACKAGE, LOCALEDIR);
-  textdomain (PACKAGE);
+  bindtextdomain(PACKAGE, LOCALEDIR);
+  textdomain(PACKAGE);
 #endif
 
   while ((optc = getopt_long(argc, argv, "g:hq:v", longopts, NULL)) != -1)
@@ -82,14 +86,11 @@ main (int argc, char *argv[])
   {
     if (optind < argc)
       fprintf (stderr, _("%s: extra operand: %s\n"), program_name, argv[optind]);
-
+    
     fprintf (stderr, _("Try `%s --help' for more information.\n"), program_name);
     exit (EXIT_FAILURE);
   }
   
-  int sock;
-  struct sockaddr_in servername;
-
   sock = socket(PF_INET, SOCK_STREAM, 0);
   if (sock < 0)
   {
@@ -108,7 +109,6 @@ main (int argc, char *argv[])
   
   puts("sending query...\n");  
   asprintf(&sql, "%s\r\n", argv[1]);
-  //printf("STATEMENT: %s", sql);
 
   nbytes = write(sock, sql, strlen(sql) + 1);
   if (nbytes < 0)
@@ -116,6 +116,7 @@ main (int argc, char *argv[])
     perror ("write");
     exit (EXIT_FAILURE);
   }
+
   free(sql);
   
   puts("waiting for response...\n");
@@ -125,9 +126,23 @@ main (int argc, char *argv[])
     perror("recv failed");
   }
 
-  printf("Read %d bytes from server\n", nbytes);
-  puts(buf);
-    
+  err = freeq_new(&ctx, "", "");
+  if (err) {
+    dbg(ctx, "unable to create freeq context");
+    return NULL;
+  }
+  
+  freeq_set_log_priority(ctx, 10);
+  
+  err = freeq_table_header_from_msgpack(ctx, buf, nbytes, &table);
+  if (err) {
+    dbg(ctx, "invalid header in message, rejecting\n");
+  } else {  
+    printf("Read %d bytes from server, table ok\n", nbytes);
+  }
+  
+  freeq_table_to_text(ctx, table);
+
   close (sock);
   exit (EXIT_SUCCESS);
 

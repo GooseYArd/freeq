@@ -92,8 +92,20 @@ struct freeq_table {
 	struct freeq_table *next;
 };
 
-int freeq_table_column_new(struct freeq_table *table, const char *name, freeq_coltype_t coltype, void *data, size_t len);
-int freeq_table_column_new_empty(struct freeq_table *table, const char *name, freeq_coltype_t coltype, struct freeq_column **colp, size_t len);
+int freeq_table_column_new(struct freeq_ctx *ctx, 
+			   struct freeq_table *table, 
+			   const char *name, 
+			   freeq_coltype_t coltype, 
+			   void *data, 
+			   size_t len);
+
+int freeq_table_column_new_empty(struct freeq_ctx *ctx, 
+				 struct freeq_table *table, 
+				 const char *name, 
+				 freeq_coltype_t coltype, 
+				 struct freeq_column **colp, 
+				 size_t len);
+
 int freeq_attach_all_segments(struct freeq_column *from, struct freeq_column *to);
 struct freeq_column *freeq_column_get_next(struct freeq_column *column);
 struct freeq_column *freeq_column_unref(struct freeq_column *column);
@@ -117,9 +129,11 @@ struct freeq_ctx *freeq_table_get_ctx(struct freeq_table *table);
 
 int freeq_table_send(struct freeq_ctx *c, struct freeq_table *table);
 int freeq_table_write_sock(struct freeq_ctx *c, struct freeq_table *table, int sock);
+int freeq_error_write_sock(struct freeq_ctx *ctx, const char *errmsg, int sock);
 int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ctx *ctx, struct freeq_table *table);
 int freeq_table_new_from_string(struct freeq_ctx *ctx, const char *string, struct freeq_table **table);
 int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *buf, size_t bufsize, struct freeq_table **table);
+int freeq_table_to_text(struct freeq_ctx *ctx, struct freeq_table *table);
 struct freeq_column *freeq_table_get_some_column(struct freeq_table *table);
 
 #ifdef __cplusplus

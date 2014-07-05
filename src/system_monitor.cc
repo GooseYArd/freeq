@@ -60,13 +60,13 @@ void procnothread(const char *machineip)
 		pids[i] = ptab[i]->ppid;
 	}
 
-	err = freeq_table_column_new(tbl, "machineip", FREEQ_COL_STRING, machineips, tbl->numrows);
+	err = freeq_table_column_new(ctx, tbl, "machineip", FREEQ_COL_STRING, machineips, tbl->numrows);
 	if (err < 0)
 		exit(EXIT_FAILURE);
-	err = freeq_table_column_new(tbl, "pid", FREEQ_COL_NUMBER, pids, tbl->numrows);
+	err = freeq_table_column_new(ctx, tbl, "pid", FREEQ_COL_NUMBER, pids, tbl->numrows);
 	if (err < 0)
 		exit(EXIT_FAILURE);
-	err = freeq_table_column_new(tbl, "command", FREEQ_COL_STRING, cmds, tbl->numrows);
+	err = freeq_table_column_new(ctx, tbl, "command", FREEQ_COL_STRING, cmds, tbl->numrows);
 	if (err < 0)
 		exit(EXIT_FAILURE);
 
