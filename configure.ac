@@ -8,11 +8,19 @@ dnl This program is distributed in the hope that it will be useful, but
 dnl WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
 dnl implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-AC_INIT([Freeq], [0.1], [gooseyard@gmail.com],,[http://go.c800colon5.com/freeq])
+AC_INIT([Freeq], 
+        [0.1], 
+        [gooseyard@gmail.com],[],
+        [http://go.c800colon5.com/freeq])
 
 dnl Must come before AM_INIT_AUTOMAKE.
 AC_CONFIG_AUX_DIR([build-aux])
-AM_INIT_AUTOMAKE([1.11.1 readme-alpha parallel-tests])
+AM_INIT_AUTOMAKE([
+        1.11.1 
+        readme-alpha 
+        parallel-tests
+        subdir-objects
+])
 AC_PREREQ([2.62])
 
 AC_CONFIG_MACRO_DIR([m4])
@@ -84,9 +92,6 @@ AM_GNU_GETTEXT([external])
 AC_CONFIG_FILES([Makefile
            contrib/Makefile
            doc/Makefile
-           lib/Makefile
            man/Makefile
-           po/Makefile.in
-           src/Makefile
-           tests/Makefile])
+           po/Makefile.in])
 AC_OUTPUT

@@ -60,9 +60,9 @@ struct freeq_ctx {
 	int log_priority;
 };
 
-void freeq_log(struct freeq_ctx *ctx,
-	   int priority, const char *file, int line, const char *fn,
-	   const char *format, ...)
+FREEQ_EXPORT void freeq_log(struct freeq_ctx *ctx,
+			    int priority, const char *file, int line, const char *fn,
+			    const char *format, ...)
 {
 	va_list args;
 
@@ -636,7 +636,7 @@ int freeq_unpack_string(struct freeq_ctx* ctx, char *buf, size_t bufsize, size_t
 	return res;
 }
 
-int freeq_attach_all_segments(struct freeq_column *from, struct freeq_column *to) {
+FREEQ_EXPORT int freeq_attach_all_segments(struct freeq_column *from, struct freeq_column *to) {
 	int count = 0;
 	struct freeq_column_segment *tail = to->segments;
 

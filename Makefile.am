@@ -18,14 +18,82 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+
 # Find gnulib headers.
 ACLOCAL_AMFLAGS = -I m4
 
+AM_CPPFLAGS = \
+	-include $(top_builddir)/config.h \
+	-DSYSCONFDIR=\""$(sysconfdir)"\" \
+	-DLIBEXECDIR=\""$(libexecdir)"\" \
+	-I${top_srcdir}/gnulib \
+	-I${top_srcdir}/gnulib/lib \
+	-I${top_srcdir}/src/freeq \
+	-I${top_srcdir}/src \
+	$(SQLITE4_CFLAGS) \
+	-DENABLE_LOGGING \
+	-DENABLE_DEBUG
+
+AM_CFLAGS = ${my_CFLAGS} \
+	-fvisibility=hidden \
+	-ffunction-sections \
+	-fdata-sections
+
+AM_LDFLAGS = \
+	-Wl,--gc-sections \
+	-Wl,--as-needed
+
+DEFS = -DLOCALEDIR=\"$(localedir)\" @DEFS@
+
 # Additional files to distribute.
-EXTRA_DIST = README-dev ChangeLog.O m4/gnulib-cache.m4
+EXTRA_DIST = \
+	README-dev \
+	ChangeLog.O \
+	m4/gnulib-cache.m4
 
 # Subdirectories to descend into.
-SUBDIRS = contrib lib po src doc man tests
+SUBDIRS = po
+
+bin_PROGRAMS = freeqd system_monitor freeql
+
+lib_LTLIBRARIES = libfreeq-1.0.la
+libfreeq_1_0_la_SOURCES = src/libfreeq.c
+
+libfreeq_1_0_la_LIBADD = $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(PROCPS_LIBS)
+
+freeqd_SOURCES = src/freeqd.cc src/system.h
+freeql_SOURCES = src/freeql.cc src/system.h
+system_monitor_SOURCES = src/system_monitor.cc src/system.h
+
+system_monitor_LDADD = $(LIBINTL) $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(PROCPS_LIBS)
+freeqd_LDADD = $(LIBINTL) $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(SQLITE4_LDFLAGS)
+freeql_LDADD = $(LIBINTL) $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la 
+
+TESTS = check_basic check_msgpack
+
+check_PROGRAMS = check_basic check_msgpack
+check_basic_SOURCES = tests/check_basic.c $(top_builddir)/src/freeq/freeq.h
+check_basic_CFLAGS = @CHECK_CFLAGS@
+check_basic_LDADD = $(top_builddir)/src/libfreeq-1.0.la @CHECK_LIBS@
+
+check_msgpack_SOURCES = tests/check_msgpack.c $(top_builddir)/src/freeq/freeq.h
+check_msgpack_CFLAGS = @CHECK_CFLAGS@
+check_msgpack_LDADD = $(top_builddir)/src/libfreeq-1.0.la @CHECK_LIBS@
+
+LOG_COMPILER = $(SHELL)
+
+AM_TESTS_ENVIRONMENT = \
+  top_srcdir=$(top_srcdir) \
+  PATH=.$(PATH_SEPARATOR)../src$(PATH_SEPARATOR)$$PATH \
+  FREEQ=`echo freeq | sed '$(transform)'`; \
+  export FREEQ PATH top_srcdir;
+
+MOSTLYCLEANFILES =
+noinst_LTLIBRARIES = 
+BUILT_SOURCES = 
+CLEANFILES =
+
+include $(top_srcdir)/lib/local.mk
 
 # Verify that all source files using _() are listed in po/POTFILES.in.
 # The idea is to run this before making pretests, as well as official

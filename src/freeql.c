@@ -129,7 +129,7 @@ main (int argc, char *argv[])
   err = freeq_new(&ctx, "", "");
   if (err) {
     dbg(ctx, "unable to create freeq context");
-    return NULL;
+    exit(EXIT_FAILURE);
   }
   
   freeq_set_log_priority(ctx, 10);
