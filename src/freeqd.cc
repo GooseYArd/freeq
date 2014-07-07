@@ -507,6 +507,7 @@ void* handler(void *paramsd) {
 		}
 
 		do {
+
 			if (j >= segment_size) {
 				// pack and send table, flag continuation
 				//send(client_local, "segment\n", 8, 0);
@@ -514,6 +515,7 @@ void* handler(void *paramsd) {
 				j = 0;
 			}
 
+                        dbg(ctx, "handling row %d\n", j);
 			colp = tblp->columns;
 			for (int i = 0; i < numcols; i++) {
 				seg = colp->segments;
@@ -532,18 +534,22 @@ void* handler(void *paramsd) {
 				}
 				colp = colp->next;
 			}
-
-			colp = tblp->columns;
-			for (int i = 0; i < numcols; i++) {
-				seg = colp->segments;
-				seg->len = j;
+                        
+                        dbg(ctx, "setting all segments to len %d\n", j);
+                        colp = tblp->columns;
+                        while (colp != NULL) {
+				colp->segments->len = j+1;
 				colp = colp->next;
 			}
-			tblp->numrows = j;
-			j++;
 
+                        dbg(ctx, "setting table to len %d\n", j);
+                        tblp->numrows = j+1;			
+                        j++;
+                        
 		} while (sqlite4_step(pStmt) == SQLITE4_ROW);
 
+
+                dbg(ctx, "setting table, length %d\n", tblp->numrows);
 		sqlite4_finalize(pStmt);
 		// pack and send table, flag no continuation
 		dbg(ctx, "sending result");

@@ -1,6 +1,6 @@
-This is the README file for the GNU Freeq distribution.
-Hello prints a friendly greeting.  It also serves as a sample GNU
-package, showing practices that may be useful for GNU projects.
+This is the README file for the Freeq distribution.
+
+Freeq is a system for monitoring computers.
 
   Copyright (C) 2014 Free Software Foundation, Inc.
 
@@ -49,4 +49,4 @@ D.M. Ritchie.  The GNU implementation is substantially more complex, in
 order to be a canonical example of a GNU package.  Many people have
 contributed; please see the ./AUTHORS and ./ChangeLog files.
 
-GNU Freeq is free software.  See the file COPYING for copying conditions.
+Freeq is free software.  See the file COPYING for copying conditions.

@@ -12,84 +12,128 @@
 #include "freeq/libfreeq.h"
 #include <proc/readproc.h>
 
-#include <vector>
-#include <string>
-
 #define NODE0 "node0"
 #define NODE1 "node1"
 
 #define DEBUG(X) fprintf(stderr, _("DEBUG: %s\n"), X);
 
-using namespace std;
-
 static const struct option longopts[] = {
-	{"nodename", required_argument, NULL, 'n'},
-	{"help", no_argument, NULL, 'h'},
-	{"version", no_argument, NULL, 'v'},
-	{NULL, 0, NULL, 0}
+        {"nodename", required_argument, NULL, 'n'},
+        {"help", no_argument, NULL, 'h'},
+        {"version", no_argument, NULL, 'v'},
+        {NULL, 0, NULL, 0}
 };
 
 static void print_help (void);
 static void print_version (void);
 
+void freeproctab(proc_t ** tab)
+{
+  proc_t** p;
+  for(p = tab; *p; p++)
+    freeproc(*p);
+  free(tab);
+}
+
 void procnothread(const char *machineip)
 {
-	struct freeq_ctx *ctx;
-	struct freeq_table *tbl;
-	int err;
+        struct freeq_ctx *ctx;
+        struct freeq_table *tbl;
+        int err;
 
-	err = freeq_new(&ctx, "system_monitor", NULL);
-	if (err < 0)
-		exit(EXIT_FAILURE);
+        err = freeq_new(&ctx, "system_monitor", NULL);
+        if (err < 0)
+                exit(EXIT_FAILURE);
 
-	freeq_set_identity(ctx, machineip);
-	err = freeq_table_new_from_string(ctx, "procnothread", &tbl);
-	if (err < 0)
-		exit(EXIT_FAILURE);
+        freeq_set_identity(ctx, machineip);
 
-	proc_t** ptab = readproctab(PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLSTATUS);
-	for (tbl->numrows = 0 ; ptab[tbl->numrows] != NULL; tbl->numrows++);
+        err = freeq_table_new_from_string(ctx, "procnothread", &tbl);
+        if (err < 0)
+                exit(EXIT_FAILURE);
 
-	const char* machineips[tbl->numrows];
-	const char* cmds[tbl->numrows];
-	int pids[tbl->numrows];
+        proc_t** ptab = readproctab(PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLSTATUS);
+        for (tbl->numrows = 0 ; ptab[tbl->numrows] != NULL; tbl->numrows++);
 
-	for (int i = 0; i < tbl->numrows; i++) {
-		machineips[i] = machineip;
-		cmds[i] = ptab[i]->cmd;
-		pids[i] = ptab[i]->ppid;
-	}
+        const char* machineips[tbl->numrows];
+        const char* cmds[tbl->numrows];
+        int pids[tbl->numrows];
+        unsigned pcpu[tbl->numrows];
+        char state[tbl->numrows];
+        long priority[tbl->numrows];
+        long nice[tbl->numrows];
+        long rss[tbl->numrows];
+        long vsize[tbl->numrows];
+        int euid[tbl->numrows];
+        int egid[tbl->numrows];
+        int ruid[tbl->numrows];
+        int rgid[tbl->numrows];
 
-	err = freeq_table_column_new(ctx, tbl, "machineip", FREEQ_COL_STRING, machineips, tbl->numrows);
-	if (err < 0)
-		exit(EXIT_FAILURE);
-	err = freeq_table_column_new(ctx, tbl, "pid", FREEQ_COL_NUMBER, pids, tbl->numrows);
-	if (err < 0)
-		exit(EXIT_FAILURE);
-	err = freeq_table_column_new(ctx, tbl, "command", FREEQ_COL_STRING, cmds, tbl->numrows);
-	if (err < 0)
-		exit(EXIT_FAILURE);
+        for (int i = 0; i < tbl->numrows; i++) {
+                machineips[i] = machineip;
+                cmds[i] = ptab[i]->cmd;
+                pids[i] = ptab[i]->ppid;
+                pcpu[i] = ptab[i]->pcpu;
+                state[i] = ptab[i]->state;
+                priority[i] = ptab[i]->priority;
+                nice[i] = ptab[i]->nice;
+                rss[i] = ptab[i]->rss;
+                vsize[i] = ptab[i]->vsize;
+                euid[i] = ptab[i]->euid;
+                egid[i] = ptab[i]->egid;
+                ruid[i] = ptab[i]->ruid;
+                rgid[i] = ptab[i]->rgid;
+        }
 
-	freeq_table_send(ctx, tbl);
-	freeq_table_unref(tbl);
-	//freeproctab(ptab);
-	freeq_unref(ctx);
+        err = freeq_table_column_new(ctx, tbl, "machineip", FREEQ_COL_STRING, machineips, tbl->numrows);
+        if (err < 0)
+                exit(EXIT_FAILURE);
+        err = freeq_table_column_new(ctx, tbl, "pid", FREEQ_COL_NUMBER, pids, tbl->numrows);
+        if (err < 0)
+                exit(EXIT_FAILURE);
+        err = freeq_table_column_new(ctx, tbl, "command", FREEQ_COL_STRING, cmds, tbl->numrows);
+        if (err < 0)
+          exit(EXIT_FAILURE);
+        err = freeq_table_column_new(ctx, tbl, "pcpu", FREEQ_COL_NUMBER, pcpu, tbl->numrows);
+        if (err < 0)
+                exit(EXIT_FAILURE);
+        err = freeq_table_column_new(ctx, tbl, "state", FREEQ_COL_NUMBER, state, tbl->numrows);
+        if (err < 0)
+                exit(EXIT_FAILURE);
+        err = freeq_table_column_new(ctx, tbl, "priority", FREEQ_COL_NUMBER, priority , tbl->numrows);
+        if (err < 0)
+                exit(EXIT_FAILURE);
+        err = freeq_table_column_new(ctx, tbl, "nice", FREEQ_COL_NUMBER, nice, tbl->numrows);
+        if (err < 0)
+                exit(EXIT_FAILURE);
+        err = freeq_table_column_new(ctx, tbl, "rss", FREEQ_COL_NUMBER, rss, tbl->numrows);
+        if (err < 0)
+                exit(EXIT_FAILURE);
+        err = freeq_table_column_new(ctx, tbl, "vsize", FREEQ_COL_NUMBER, vsize , tbl->numrows);
+        if (err < 0)
+          exit(EXIT_FAILURE);
+        err = freeq_table_column_new(ctx, tbl, "euid", FREEQ_COL_NUMBER, euid , tbl->numrows);
+        if (err < 0)
+          exit(EXIT_FAILURE);
+        err = freeq_table_column_new(ctx, tbl, "egid", FREEQ_COL_NUMBER, egid , tbl->numrows);
+        if (err < 0)
+          exit(EXIT_FAILURE);
+        err = freeq_table_column_new(ctx, tbl, "ruid", FREEQ_COL_NUMBER, ruid , tbl->numrows);
+        if (err < 0)
+          exit(EXIT_FAILURE);
+        err = freeq_table_column_new(ctx, tbl, "rgid", FREEQ_COL_NUMBER, rgid , tbl->numrows);
+        if (err < 0)
+                exit(EXIT_FAILURE);
+
+        freeq_table_send(ctx, tbl);
+        freeq_table_unref(tbl);
+        freeproctab(ptab);
+        freeq_unref(ctx);
 }
 
 int publisher (const char *url, const char *agent, const char *node_name)
 {
 
   procnothread(node_name);
-
- // int sz_msg = strlen (msg) + 1;
- //  int sock = nn_socket (AF_SP, NN_PUSH);
- //  assert(sock >= 0);
- //  assert(nn_connect (sock, url) >= 0);
-
- //  printf("NODE1: SENDING \"%s\"\n", msg);
- //  int bytes = nn_send (sock, msg, sz_msg, 0);
- //  assert(bytes == sz_msg);
- //  return nn_shutdown (sock, 0);
 
 }
 
@@ -131,9 +175,9 @@ main (int argc, char *argv[])
   {
     if (optind < argc)
       fprintf (stderr, _("%s: extra operand: %s\n"), program_name,
-	       argv[optind]);
+               argv[optind]);
     fprintf (stderr, _("Try `%s --help' for more information.\n"),
-	     program_name);
+             program_name);
     exit (EXIT_FAILURE);
   }
 
@@ -180,16 +224,16 @@ Print a friendly, customizable greeting.\n"), stdout);
 Report bugs to: %s\n"), PACKAGE_BUGREPORT);
 #ifdef PACKAGE_PACKAGER_BUG_REPORTS
   printf (_("Report %s bugs to: %s\n"), PACKAGE_PACKAGER,
-	  PACKAGE_PACKAGER_BUG_REPORTS);
+          PACKAGE_PACKAGER_BUG_REPORTS);
 #endif
 #ifdef PACKAGE_URL
   printf (_("%s home page: <%s>\n"), PACKAGE_NAME, PACKAGE_URL);
 #else
   printf (_("%s home page: <http://www.gnu.org/software/%s/>\n"),
-	  PACKAGE_NAME, PACKAGE);
+          PACKAGE_NAME, PACKAGE);
 #endif
   fputs (_("General help using GNU software: <http://www.gnu.org/gethelp/>\n"),
-	 stdout);
+         stdout);
 }
 
 
