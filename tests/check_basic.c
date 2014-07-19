@@ -102,7 +102,7 @@ START_TEST (test_freeq_col_new_ret)
 	freeq_new(&ctx, appname, identity);
 	freeq_table_new_from_string(ctx, "foo", &t);
 
-	ck_assert_int_eq(freeq_table_column_new(t, "bar", FREEQ_COL_NUMBER, NULL, 0), 0);
+	ck_assert_int_eq(freeq_table_column_new(ctx, t, "bar", FREEQ_COL_NUMBER, NULL, 0), 0);
 
 	freeq_table_unref(t);
 	freeq_unref(ctx);
@@ -115,7 +115,7 @@ START_TEST (test_freeq_col_new_ptr)
 	struct freeq_table *t;
 	freeq_new(&ctx, appname, identity);
 	freeq_table_new_from_string(ctx, "foo", &t);
-	freeq_table_column_new(t, "bar", FREEQ_COL_NUMBER, NULL, 0);
+	freeq_table_column_new(ctx, t, "bar", FREEQ_COL_NUMBER, NULL, 0);
 	ck_assert_ptr_ne(t->columns, NULL);
 	ck_assert_int_eq(t->columns->coltype, FREEQ_COL_NUMBER);
 	ck_assert_str_eq(t->columns->name, "bar");
@@ -135,7 +135,7 @@ START_TEST (test_freeq_col_pack_unpack)
 		
 	freeq_new(&ctx, appname, identity);
 	freeq_table_new_from_string(ctx, "foo", &t);
-	freeq_table_column_new(t, "bar", FREEQ_COL_NUMBER, &data, 10);
+	freeq_table_column_new(ctx, t, "bar", FREEQ_COL_NUMBER, &data, 10);
 	ck_assert_ptr_eq(t->columns->segments->data, &data);
 	ck_assert_ptr_ne(freeq_get_identity(ctx), NULL);
 	

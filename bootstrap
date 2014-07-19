@@ -1,6 +1,6 @@
 #! /bin/sh
 # Print a version string.
-scriptversion=2013-08-15.22; # UTC
+scriptversion=2014-07-13.00; # UTC
 
 # Bootstrap this package from checked-out sources.
 
@@ -272,6 +272,7 @@ fi
 
 # Translate configuration into internal form.
 
+SKIP_PO=t
 # Parse options.
 
 for option
@@ -282,8 +283,6 @@ do
     exit;;
   --gnulib-srcdir=*)
     GNULIB_SRCDIR=${option#--gnulib-srcdir=};;
-  --skip-po)
-    SKIP_PO=t;;
   --force)
     checkout_only_file=;;
   --copy)

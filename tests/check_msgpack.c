@@ -14,7 +14,7 @@ START_TEST (test_freeq_col_pack_unpack)
 	
 	freeq_new(&ctx, appname, identity);
 	freeq_table_new_from_string(ctx, "foo", &t);
-	freeq_table_column_new(t, "bar", FREEQ_COL_NUMBER, &data, 10);
+	freeq_table_column_new(ctx, t, "bar", FREEQ_COL_NUMBER, &data, 10);
 	ck_assert_ptr_eq(t->columns->segments->data, &data);
 	ck_assert_ptr_ne(freeq_get_identity(ctx), NULL);
 	
@@ -38,7 +38,7 @@ START_TEST (test_freeq_col_pack_unpack_check_data)
 	
 	freeq_new(&ctx, appname, identity);
 	freeq_table_new_from_string(ctx, "foo", &t);
-	freeq_table_column_new(t, "bar", FREEQ_COL_NUMBER, &data, 10);
+	freeq_table_column_new(ctx, t, "bar", FREEQ_COL_NUMBER, &data, 10);
 	
 	msgpack_sbuffer_init(&sbuf);
 
@@ -76,10 +76,7 @@ START_TEST (test_freeq_col_pack_something)
 	
 	freeq_new(&ctx, appname, identity);
 	freeq_table_new_from_string(ctx, "foo", &t);
-
-	printf("THE VALUE: %d\n", sizeof(data)/sizeof(data[0]));
-
-	freeq_table_column_new(t, "bar", FREEQ_COL_NUMBER, &data, 10);	
+	freeq_table_column_new(ctx, t, "bar", FREEQ_COL_NUMBER, &data, 10);	
 
 	msgpack_sbuffer_init(&sbuf);
 	

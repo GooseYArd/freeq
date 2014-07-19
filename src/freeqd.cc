@@ -60,6 +60,8 @@ static const struct option longopts[] = {
 	{NULL, 0, NULL, 0}
 };
 
+/*const char *tables_sql = "SELECT name FROM sqlite_master WHERE type=\'table\';" */
+
 typedef std::string tablename;
 typedef std::string provider;
 typedef std::map<tablename, struct freeq_table *> freeq_generation;
@@ -85,11 +87,10 @@ const freeq_coltype_t sqlite_to_freeq_coltype[] = {
 	FREEQ_COL_NULL,   // 5 SQLITE_NULL
 };
 
-int aggregate_table_segments(struct freeq_ctx *ctx, const char *name, freeq_table *table) {
-
+int aggregate_table_segments(struct freeq_ctx *ctx, const char *name, freeq_table *table) 
+{	
 	typedef std::pair<std::string, int> colsig_t;
 	typedef std::map<colsig_t, int> colprof_t;
-	//bool consistant;
 	freeq_table *tbl, *parent, *tail;
 	colprof_t colprof;
 	int numcols = 0;
@@ -97,11 +98,13 @@ int aggregate_table_segments(struct freeq_ctx *ctx, const char *name, freeq_tabl
 	dbg(ctx, "aggregating segments for table %s\n", name);
 
 	tbl = table;
-	while (tbl != NULL) {
+	while (tbl != NULL) 
+	{
 		//dbg(ctx, "ok cool, we parsed %d segment headers.\n", headers.size());
 		freeq_column *c = tbl->columns;
 		numcols = 0;
-		while (c != NULL) {
+		while (c != NULL) 
+		{
 			colprof[colsig_t(c->name, c->coltype)]++;
 			c = c->next;
 			numcols++;
@@ -112,22 +115,25 @@ int aggregate_table_segments(struct freeq_ctx *ctx, const char *name, freeq_tabl
 		dbg(ctx, "segment %s:%s has %d columns\n", tbl->identity, tbl->name, numcols);
 	}
 
-	for (colprof_t::iterator it = colprof.begin(); it != colprof.end(); ++it) {
-		if (it->second != numcols) {
+	for (colprof_t::iterator it = colprof.begin(); it != colprof.end(); ++it) 
+	{
+		if (it->second != numcols) 
+		{
 			//consistant = false;
 			dbg(ctx, "inconsistant schema!\n", "");
 			break;
 		}
 	}
 
+	// TODO: this is a bug
 	tbl = parent->next;
-	while (tbl != NULL) {
+	while (tbl != NULL) 
+	{
 		freeq_column *c = tbl->columns;
 		freeq_column *parc = parent->columns;
 		numcols = 0;
-		while (c != NULL) {
-			parent->numrows += freeq_attach_all_segments(c, parc);
-		}
+		while (c != NULL) 
+			parent->numrows += freeq_attach_all_segments(c, parc);		
 	}
 
 	freeq_table_unref(parent->next);
@@ -139,7 +145,8 @@ int drop_table(struct freeq_table *tbl, sqlite4 *mDb)
 {
 	int res;
 	char *drop_cmd;
-	if (!asprintf(&drop_cmd, "DROP TABLE %s;", tbl->name)) {
+	if (!asprintf(&drop_cmd, "DROP TABLE %s;", tbl->name)) 
+	{
 		fprintf(stderr, "failed to allocate buffer for drop table");
 		return -ENOMEM;
 	}
@@ -153,7 +160,8 @@ int create_table(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 	std::stringstream stm;
 	struct freeq_column *col = tbl->columns;
 	stm << "CREATE TABLE IF NOT EXISTS " << tbl->name << "(";
-	while (col != NULL) {
+	while (col != NULL) 
+	{
 		dbg(ctx, "create_table: type is %d\n", col->coltype);
 		stm << col->name << " " << freeq_sqlite_typexpr[col->coltype];
 		col = col->next;
@@ -172,16 +180,15 @@ int statement(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb, sqli
 	int res;
 
 	stm << "INSERT INTO " << tbl->name << " VALUES (";
-	for (int i = 1; i < tbl->numcols; i++) {
+	for (int i = 1; i < tbl->numcols; i++)
 		stm << "?" << i << ", ";
-	}
+
 	stm << "?" << tbl->numcols << ");";
 	dbg(ctx, "statement: %s\n", (char *)stm.str().c_str());
 	res = sqlite4_prepare(mDb, stm.str().c_str(), stm.str().size(), &s, NULL);
-	if (res == SQLITE4_OK) {
+	if (res == SQLITE4_OK) 
 		*stmt = s;
-
-	}
+	
 	return res;
 }
 
@@ -193,21 +200,24 @@ int to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 	struct freeq_column *colp;
 	int res;
 
-	if (sqlite4_exec(mDb, "BEGIN TRANSACTION;", NULL, NULL) != SQLITE4_OK) {
+	if (sqlite4_exec(mDb, "BEGIN TRANSACTION;", NULL, NULL) != SQLITE4_OK)
+	{
 		dbg(ctx, "unable to start transaction\n");
 		return 1;
 	}
-
+	
 	if (drop_table(tbl, mDb) != SQLITE4_OK)
 		dbg(ctx, "failed to drop table, ignoring");
 
-	if (create_table(ctx, tbl, mDb) != SQLITE4_OK) {
+	if (create_table(ctx, tbl, mDb) != SQLITE4_OK) 
+	{
 		dbg(ctx, "failed to create table, rolling back");
 		sqlite4_exec(mDb, "ROLLBACK;", NULL, NULL);
 		return 1;
 	}
 
-	if ((res = statement(ctx, tbl, mDb, &stmt)) != SQLITE4_OK) {
+	if ((res = statement(ctx, tbl, mDb, &stmt)) != SQLITE4_OK) 
+	{
 		dbg(ctx, "failed to create statement (%d), rolling back", res);
 		sqlite4_exec(mDb, "ROLLBACK;", NULL, NULL);
 		return 1;
@@ -226,13 +236,15 @@ int to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 			{
 			case FREEQ_COL_STRING:
 				sqlite4_bind_text(stmt, j, strarrp[i], strlen(strarrp[i]), SQLITE4_TRANSIENT, NULL);
-				if (res != SQLITE4_OK) {
+				if (res != SQLITE4_OK) 
+				{
 					dbg(ctx, "failed bind: %s", sqlite4_errmsg(mDb));
 				}
 				break;
 			case FREEQ_COL_NUMBER:
 				res = sqlite4_bind_int(stmt, j, intarrp[i]);
-				if (res != SQLITE4_OK) {
+				if (res != SQLITE4_OK) 
+				{
 					dbg(ctx, "failed bind: %s", sqlite4_errmsg(mDb));
 				}
 				break;
@@ -263,9 +275,9 @@ static
 int log_monitor(void *NotUsed, int argc, sqlite4_value **argv, const char **azColName)
 {
 	int i;
-	for (i = 0; i < argc; i++) {
+	for (i = 0; i < argc; i++) 
 		printf("%s = %d\n", azColName[i], atoi((char *)argv[i]));
-	}
+	
 	printf("\n");
 	return 0;
 }
@@ -282,9 +294,9 @@ void *monitor (void *arg)
 	sigwait(&catchsig, &sigrecv);
 	pthread_mutex_lock(&pthread_info.mutex);
 	pthread_info.received_shutdown_req = 1;
-	while (pthread_info.num_active > 0) {
+	while (pthread_info.num_active > 0) 
 		pthread_cond_wait(&pthread_info.thread_exit_cv, &pthread_info.mutex);
-	}
+	
 
 	pthread_mutex_unlock(&pthread_info.mutex);
 	exit(0);
@@ -310,11 +322,12 @@ void *receiver (void *arg)
 	int sock = nn_socket(AF_SP, NN_PULL);
 
 	err = freeq_new(&ctx, "appname", "identity");
-	if (err) {
+	if (err) 
+	{
 		dbg(ctx, "unable to create freeq context");
 		return NULL;
 	}
-
+	
 	freeq_set_log_priority(ctx, 10);
 
 	assert(sock >= 0);
@@ -324,7 +337,8 @@ void *receiver (void *arg)
 	freeq_generation fg;
 	freeq_generation::iterator it;
 
-	while (1) {
+	while (1) 
+	{
 		char *buf = NULL;
 		dbg(ctx, "generation has %d entries\n", fg.size());
 		int size = nn_recv(sock, &buf, NN_MSG, 0);
@@ -333,7 +347,8 @@ void *receiver (void *arg)
 		freeq_table *table;
 		dbg(ctx, "receiver(): read %d bytes\n", size);
 		res = freeq_table_header_from_msgpack(ctx, buf, size, &table);
-		if (res) {
+		if (res) 
+		{
 			dbg(ctx, "invalid header in message, rejecting\n");
 			continue;
 		}
@@ -344,25 +359,29 @@ void *receiver (void *arg)
 		{
 			dbg(ctx, "receiver: this is a new table\n");
 			fg[table->name] = table;
-		} else {
-
+		} 
+		else 
+		{
 			struct freeq_table *tmp = it->second;
 			struct freeq_table *tail = NULL;
-			while (tmp != NULL) {
+			while (tmp != NULL) 
+			{
 				if (tmp->identity == table->identity)
 					break;
 				tail = tmp;
 				tmp = tmp->next;
 			}
-
+			
 			/* we don't have a table from this provider */
-			if (tmp == NULL) {
+			if (tmp == NULL) 
+			{
 				dbg(ctx, "receiver: appending table for %s/%s\n", table->name, table->identity);
 				tail->next = table;
-			} else {
+			} 
+			else 
+			{
 				dbg(ctx, "generation already contains %s/%s\n", table->name, table->identity);
-			}
-
+			}			
 		}
 
 		to_db(ctx, table, ri->pDb);
@@ -390,7 +409,8 @@ int readline(int fd, char *str, int maxlen)
 	int n;
 	int readcount;
 	char c;
-	for (n = 1; n < maxlen; n++) {
+	for (n = 1; n < maxlen; n++) 
+	{
 		readcount = read(fd, &c, 1);
 		if (readcount == 1)
 		{
@@ -447,7 +467,8 @@ void* handler(void *paramsd) {
 
 	res = freeq_new(&ctx, "freeqd_handler", "identity");
 	freeq_set_log_priority(ctx, 10);
-	if (res) {
+	if (res) 
+	{
 		dbg(ctx, "unable to create freeq context\n");
 		return NULL;
 	}
@@ -463,7 +484,8 @@ void* handler(void *paramsd) {
                         continue;
 
 		res = sqlite4_prepare(pDb, line, -1, &pStmt, 0);
-		if (res != SQLITE4_OK) {
+		if (res != SQLITE4_OK) 
+		{
                         dbg(ctx, "prepare failed, sending error\n");
 			freeq_error_write_sock(ctx, sqlite4_errmsg(pDb), client_local);
 			sqlite4_finalize(pStmt);
@@ -472,14 +494,16 @@ void* handler(void *paramsd) {
 
 		/* column type is unset until the query has been
 		 * stepped once */
-		if (sqlite4_step(pStmt) != SQLITE4_ROW) {
+		if (sqlite4_step(pStmt) != SQLITE4_ROW) 
+		{
 			freeq_error_write_sock(ctx, sqlite4_errmsg(pDb), client_local);
 			sqlite4_finalize(pStmt);
 			continue;
 		}
 
 		freeq_table_new_from_string(ctx, "result", &tblp);
-		if (!tblp) {
+		if (!tblp) 
+		{
 			dbg(ctx, "unable to allocate table\n");
 			freeq_error_write_sock(ctx, "ENOMEM", client_local);
 			sqlite4_finalize(pStmt);
@@ -490,7 +514,8 @@ void* handler(void *paramsd) {
 		dbg(ctx, "creating response table %s, %d columns\n", tblp->name, numcols);
 		int j = 0;
 
-		for (int i = 0; i < numcols; i++) {
+		for (int i = 0; i < numcols; i++) 
+		{
 			const char *cname = strdup(sqlite4_column_name(pStmt, i));
 			int s4ctype = sqlite4_column_type(pStmt, i);
 			freeq_coltype_t ctype = sqlite_to_freeq_coltype[s4ctype];
@@ -507,8 +532,8 @@ void* handler(void *paramsd) {
 		}
 
 		do {
-
-			if (j >= segment_size) {
+			if (j >= segment_size) 
+			{
 				// pack and send table, flag continuation
 				//send(client_local, "segment\n", 8, 0);
 				tblp->numrows = 0;
@@ -517,7 +542,8 @@ void* handler(void *paramsd) {
 
                         dbg(ctx, "handling row %d\n", j);
 			colp = tblp->columns;
-			for (int i = 0; i < numcols; i++) {
+			for (int i = 0; i < numcols; i++) 
+			{
 				seg = colp->segments;
 				switch (colp->coltype) {
 				case FREEQ_COL_STRING:
@@ -537,7 +563,8 @@ void* handler(void *paramsd) {
                         
                         dbg(ctx, "setting all segments to len %d\n", j);
                         colp = tblp->columns;
-                        while (colp != NULL) {
+                        while (colp != NULL) 
+			{
 				colp->segments->len = j+1;
 				colp = colp->next;
 			}
@@ -585,7 +612,8 @@ void *sqlserver(void *arg) {
 	signal(SIGPIPE, SIG_IGN);
 
 	server = socket(PF_INET, SOCK_STREAM, 0);
-	if (server < 0) {
+	if (server < 0) 
+	{
 		dbg(ctx, "cannot open socket ");
 		freeq_unref(ctx);
 		return NULL;
@@ -599,7 +627,8 @@ void *sqlserver(void *arg) {
 
 	setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval);
 
-	if (bind(server, (struct sockaddr *) &servAddr, sizeof(struct sockaddr)) < 0) {
+	if (bind(server, (struct sockaddr *) &servAddr, sizeof(struct sockaddr)) < 0) 
+	{
 		dbg(ctx, "cannot bind port ");
 		freeq_unref(ctx);
 		return NULL;
@@ -612,7 +641,8 @@ void *sqlserver(void *arg) {
 		dbg(ctx, "waiting for data on port %u\n", SERVER_PORT);
 		addr_len = sizeof(cliAddr);
 		client = accept(server, (struct sockaddr *) &cliAddr, &addr_len);
-		if (client < 0) {
+		if (client < 0) 
+		{
 			dbg(ctx, "cannot accept connection ");
 			break;
 		}
@@ -683,10 +713,10 @@ main (int argc, char *argv[])
   freeq_set_log_priority(ctx, 10);
 
   //res = sqlite4_open(0, ":memory:", &pDb, 0);
-
   res = sqlite4_open(0, "ondisk.db", &pDb, SQLITE4_OPEN_READWRITE | SQLITE4_OPEN_CREATE,NULL);
 
-  if (res != SQLITE4_OK) {
+  if (res != SQLITE4_OK) 
+  {
     fprintf(stderr, "failed to open in-memory db\n");
     exit(res);
   }
@@ -708,11 +738,13 @@ main (int argc, char *argv[])
 
   res = sqlite4_exec(pDb, "create table if not exists freeq_stats(int last);", log_monitor, NULL);
 
-  if (res != SQLITE4_OK) {
+  if (res != SQLITE4_OK) 
+  {
 	  printf("creating freeq_stats failed: %d %s\n", res, sqlite4_errmsg(pDb));
   }
 
-  while (!recvstop) {
+  while (!recvstop) 
+  {
 	  //printf("running schema dump\n");
 	  //if (sqlite4_exec(pDb, "insert into poop values(1) ;", log_monitor, NULL) != SQLITE4_DONE) {
 	  //        printf("execute failed: %s\n", sqlite4_errmsg(pDb));
@@ -722,7 +754,7 @@ main (int argc, char *argv[])
   }
 
   //return receiver(ctx, "ipc:///tmp/freeqd.ipc", pDb);
-//  freeq_unref(&ctx);
+//freeq_unref(&ctx);
 
 
 }

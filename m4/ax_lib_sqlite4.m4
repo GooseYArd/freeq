@@ -83,8 +83,8 @@ AC_DEFUN([AX_LIB_SQLITE4],
         AC_MSG_CHECKING([for Sqlite4 library >= $sqlite4_version_req])
 
         if test "$ac_sqlite4_path" != ""; then
-            ac_sqlite4_ldflags="-L$ac_sqlite4_path/lib"
-            ac_sqlite4_cppflags="-I$ac_sqlite4_path/include"
+            ac_sqlite4_ldflags="-L$ac_sqlite4_path/lib -L$ac_sqlite4_path"
+            ac_sqlite4_cppflags="-I$ac_sqlite4_path/include -I$ac_sqlite4_path"
         else
             for ac_sqlite4_path_tmp in /usr /usr/local /opt ; do
                 if test -f "$ac_sqlite4_path_tmp/include/$ac_sqlite4_header" \
@@ -133,7 +133,8 @@ AC_DEFUN([AX_LIB_SQLITE4],
             SQLITE4_CFLAGS="$ac_sqlite4_cppflags"
             SQLITE4_LDFLAGS="$ac_sqlite4_ldflags"
 
-            ac_sqlite4_header_path="$ac_sqlite4_path/include/$ac_sqlite4_header"
+            #ac_sqlite4_header_path="$ac_sqlite4_path/include/$ac_sqlite4_header"
+            ac_sqlite4_header_path="$ac_sqlite4_path/$ac_sqlite4_header"
 
             dnl Retrieve SQLite release version
             if test "x$ac_sqlite4_header_path" != "x"; then

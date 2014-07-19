@@ -29,7 +29,7 @@ Building
 After getting the git sources, and installing the tools above, you
 can run
 
-  ./bootstrap
+  ./bootstrap --skip-po
 
 to do a fresh build.  After that first time, running make should suffice.
 
@@ -52,3 +52,33 @@ is necessary to run gettextize -f in this hierarchy to update the po/
 infrastructure.  After doing so, rerun gnulib-tool --import since
 otherwise older files will have been imported.  See the Gnulib manual
 for more information.
+
+Sqlite 4
+--------
+
+Install Fossil - http://www.fossil-scm.org
+
+fossil clone http://www.sqlite.org/src4/sqlite4.fossil sqlite4.fossil
+mkdir sqlite4
+cd sqlite4
+fossil open ../sqlite4.fossil
+make -f Makefile.linux-gcc
+
+Nanomsg
+-------
+
+git clone https://github.com/nanomsg/nanomsg
+./autogen.sh
+./configure
+make
+
+Msgpack
+-------
+
+git clone https://github.com/msgpack/msgpack-c
+
+
+Check
+-----
+
+wget http://downloads.sourceforge.net/project/check/check/0.9.13/check-0.9.13.tar.gz

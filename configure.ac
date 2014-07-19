@@ -67,9 +67,9 @@ AX_CXX_COMPILE_STDCXX_11
 
 PKG_CHECK_MODULES([CHECK], [check >= 0.9.4])
 
-AC_LANG_PUSH([C++])
-PKG_CHECK_MODULES(GLOG, libglog)
-AC_LANG_POP([C++])
+#AC_LANG_PUSH([C++])
+#PKG_CHECK_MODULES(GLOG, libglog)
+#AC_LANG_POP([C++])
 
 AC_GNU_SOURCE
 AC_CHECK_FUNCS([__secure_getenv secure_getenv])
