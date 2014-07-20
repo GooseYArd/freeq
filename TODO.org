@@ -1,0 +1,15 @@
+* TODO freeqd.cc accept listen port from command line  
+  need to be able to start several instances at the same time to test aggregation
+
+* TODO enable freeql listener via configuration
+
+* TODO aggregator   
+  initially aggregator will just poll all the known publishers all the time
+  we can implement a policy about not always polling later
+
+  aggregator gets list (via config file) of nodes it should talk to
+  agg sends message to nodes requesting tables (either list, or the whole thing)
+
+ 
+* TODO staticinfo/tableprov
+* TODO jsoninfo

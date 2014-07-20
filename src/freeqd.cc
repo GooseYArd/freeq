@@ -8,11 +8,21 @@
 #include <stdio.h>
 #include <nanomsg/nn.h>
 #include <nanomsg/pipeline.h>
+#include <nanomsg/tcp.h>
+#include <nanomsg/survey.h>
+
 #include <signal.h>
 #include "sqlite4.h"
+#include <stdbool.h>
 
 #include "freeq/libfreeq.h"
 #include "libfreeq-private.h"
+
+/* control */
+#include "control/stralloc.h"
+#include "control/constmap.h"
+#include "control/control.h"
+#include "control/qsutil.h"
 
 #include <iostream>
 #include <utility>
@@ -55,6 +65,9 @@ struct receiver_info {
 
 static const struct option longopts[] = {
 	{"nodename", required_argument, NULL, 'n'},
+	{"client", no_argument, NULL, 'C'},
+	{"agg", no_argument, NULL, 'A'},
+	{"freeql", no_argument, NULL, 'F' },
 	{"help", no_argument, NULL, 'h'},
 	{"version", no_argument, NULL, 'v'},
 	{NULL, 0, NULL, 0}
@@ -312,6 +325,124 @@ void *monitor (void *arg)
 	// }
 
 }
+
+/* runs in client mode, waits for an aggregator to request that we
+ * join it's survey pool */
+void *aggtoclient(void *arg)
+{
+	const char *uri = (const char *)arg;
+	freeq_ctx *ctx;	
+	int err;
+	int sock = nn_socket(AF_SP, NN_PULL);
+
+	err = freeq_new(&ctx, "appname", "identity");
+	if (err) 
+	{
+		dbg(ctx, "unable to create freeq context\n");
+		return NULL;
+	}
+
+	freeq_set_log_priority(ctx, 10);
+	dbg(ctx, "aggtoclient attempting to bind %s\n", uri);
+
+	assert(sock >= 0);
+	if (nn_bind(sock, uri) < 1)
+	{
+		perror("error");
+		exit(EXIT_FAILURE);
+	}
+	
+	dbg(ctx, "aggtoclient listener thread started\n");
+	
+	while (1) 
+	{
+		char *buf = NULL;
+		int size = nn_recv(sock, &buf, NN_MSG, 0);
+		dbg(ctx, "read %d bytes\n", size);
+	}
+
+}
+
+/* in client mode, an instance of this thread is started for each
+ * aggregator that is surveying us, and waits for a survey request */
+void *aggsurvey(void *arg)
+{
+	int err;
+	const char *url = (const char *)arg;
+	freeq_ctx *ctx;	
+	err = freeq_new(&ctx, "appname", "identity");
+	if (err)
+	{
+		dbg(ctx, "unable to create freeq context");
+		return NULL;
+	}
+	
+	dbg(ctx, "starting aggregator thread");	
+	freeq_set_log_priority(ctx, 10);
+	int sock = nn_socket(AF_SP, NN_RESPONDENT);
+	assert (sock >= 0);
+	assert (nn_connect (sock, url) >= 0);
+	while (1)
+	{
+		char *buf = NULL;
+		int bytes = nn_recv (sock, &buf, NN_MSG, 0);
+		if (bytes >= 0)
+		{
+			//printf ("CLIENT (%s): RECEIVED \"%s\" SURVEY REQUEST\n", name, buf);
+			nn_freemsg(buf);
+			// char *d = date();
+			// int sz_d = strlen(d) + 1; // '\0' too
+			// printf ("CLIENT (%s): SENDING DATE SURVEY RESPONSE\n", name);
+			// int bytes = nn_send (sock, d, sz_d, 0);
+			// assert (bytes == sz_d);
+		}
+	}
+	nn_shutdown(sock, 0);	
+}
+
+/* in aggregator mode, send a survey request to our pool of clients */
+void *aggregator(void *arg)
+{
+//	struct receiver_info *ri = (struct receiver_info *)arg;
+	int err;
+	freeq_ctx *ctx;	
+	err = freeq_new(&ctx, "appname", "identity");
+	if (err)
+	{
+		dbg(ctx, "unable to create freeq context");
+		return NULL;
+	}
+
+	dbg(ctx, "starting aggregator thread");	
+	freeq_set_log_priority(ctx, 10);
+
+	int sock = nn_socket(AF_SP, NN_SURVEYOR);
+	assert(sock >= 0);
+	assert(nn_bind(sock, "tcp://*:13001") >= 0);
+	sleep(1); // wait for connections
+
+#define DATE "poop"
+
+	int sz_d = strlen(DATE) + 1; // '\0' too
+	printf ("SERVER: SENDING DATE SURVEY REQUEST\n");
+	int bytes = nn_send(sock, DATE, sz_d, 0);
+	assert(bytes == sz_d);
+	
+	while (1)
+	{
+		char *buf = NULL;
+		int bytes = nn_recv(sock, &buf, NN_MSG, 0);
+		if (bytes == ETIMEDOUT) break;
+		if (bytes >= 0)
+		{
+			printf ("SERVER: RECEIVED \"%s\" SURVEY RESPONSE\n", buf);
+			nn_freemsg (buf);
+		}
+	}       
+	nn_shutdown(sock, 0);
+}
+
+
 
 void *receiver (void *arg)
 {
@@ -653,110 +784,152 @@ void *sqlserver(void *arg) {
 	exit(0);
 }
 
+
+int
+notify_clients(void)
+{
+	struct constmap maplocals;
+	const char *clients = "control/clients";
+	stralloc locals = {0};
+	if (control_readfile(&locals,(char *)clients,1) != 1) return 0;
+	while (!constmap_init(&maplocals,locals.s,locals.len,0)) nomem();	
+	constmap_free(&maplocals);
+}
+
 int
 main (int argc, char *argv[])
 {
+	int optc;
+	int lose = 0;
+	int err;
+	int res;
 
-  int optc;
-  int lose = 0;
-  int err;
-  int res;
-  sigset_t set;
+	bool client_mode = true;
+	bool agg_mode = false;
+	bool freeql_mode = false;
+	
+	const char *aggtoclient_nnuri = "tcp://*:13002";
+	sigset_t set;
 
-  pthread_t t_receiver;
-  pthread_t t_monitor;
-  pthread_t t_sqlserver;
-
-  struct receiver_info ri;
-  set_program_name(argv[0]);
-  setlocale(LC_ALL, "");
+	pthread_t t_receiver; 
+	//pthread_t t_aggregator;
+	pthread_t t_aggtoclient;
+	pthread_t t_monitor;
+	//pthread_t t_sqlserver;
+	
+	struct receiver_info ri;
+	set_program_name(argv[0]);
+	setlocale(LC_ALL, "");
 
 #if ENABLE_NLS
-  bindtextdomain(PACKAGE, LOCALEDIR);
-  textdomain(PACKAGE);
+	bindtextdomain(PACKAGE, LOCALEDIR);
+	textdomain(PACKAGE);
 #endif
 
-  while ((optc = getopt_long (argc, argv, "g:hnv", longopts, NULL)) != -1)
-    switch (optc)
-    {
-    case 'v':
-      print_version ();
-      exit (EXIT_SUCCESS);
-      break;
-    case 'n':
-	    //node_name = optarg;
-      break;
-    case 'h':
-      print_help ();
-      exit (EXIT_SUCCESS);
-      break;
-    default:
-      lose = 1;
-      break;
-    }
+	while ((optc = getopt_long(argc, argv, "g:hnvCAF", longopts, NULL)) != -1)
+		switch (optc)
+		{
+		case 'v':
+			print_version ();
+			exit (EXIT_SUCCESS);
+			break;
+		case 'C':
+			client_mode = true;
+		case 'A':
+			agg_mode = true;
+		case 'F':
+			freeql_mode = true;
+		case 'n':
+			//node_name = optarg;
+			break;
+		case 'h':
+			print_help ();
+			exit (EXIT_SUCCESS);
+			break;
+		default:
+			lose = 1;
+			break;
+		}
+	
+	if (lose || optind < argc)
+	{
+		if (optind < argc)
+			fprintf (stderr, _("%s: extra operand: %s\n"), program_name,
+				 argv[optind]);
+		fprintf (stderr, _("Try `%s --help' for more information.\n"),
+			 program_name);
+		exit (EXIT_FAILURE);
+	}
 
-  if (lose || optind < argc)
-  {
-    if (optind < argc)
-      fprintf (stderr, _("%s: extra operand: %s\n"), program_name,
-	       argv[optind]);
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-	     program_name);
-    exit (EXIT_FAILURE);
-  }
+	if (!(agg_mode || client_mode || freeql_mode))
+	{
+		fprintf (stderr, _("One of -F, -C or -A must be specified.\n"));
+		exit(EXIT_FAILURE);
+	}
+		
+	struct freeq_ctx *ctx;
+	err = freeq_new(&ctx, "appname", "identity");
+	if (err < 0)
+		exit(EXIT_FAILURE);
+	
+	freeq_set_log_priority(ctx, 10);
+	
+	//res = sqlite4_open(0, ":memory:", &pDb, 0);
+	res = sqlite4_open(0, "ondisk.db", &pDb, SQLITE4_OPEN_READWRITE | SQLITE4_OPEN_CREATE,NULL);
+	
+	if (res != SQLITE4_OK) 
+	{
+		fprintf(stderr, "failed to open in-memory db\n");
+		exit(res);
+	}
+	
+	ri.pDb = pDb;
+	ri.url = "ipc:///tmp/freeqd.ipc";
+	
+	sigemptyset(&set);
+	sigaddset(&set, SIGHUP);
+	sigaddset(&set, SIGINT);
+	sigaddset(&set, SIGUSR1);
+	sigaddset(&set, SIGUSR2);
+	sigaddset(&set, SIGALRM);
+	pthread_sigmask(SIG_BLOCK, &set, NULL);
+	
+	pthread_create(&t_monitor, 0, &monitor, (void *)&ri);
 
-  struct freeq_ctx *ctx;
-  err = freeq_new(&ctx, "appname", "identity");
-  if (err < 0)
-	  exit(EXIT_FAILURE);
+	if (! agg_mode || client_mode || freeql_mode) {
+	}
+	
+	// if (agg_mode)
+	// {
+	// 	pthread_create(&t_aggregator, 0, &aggregator, (void *)&ri);
+	// 	// pthread_create(&t_aggregator, 0, &aggregator, (void *)&ri);
+	// }
 
-  freeq_set_log_priority(ctx, 10);
-
-  //res = sqlite4_open(0, ":memory:", &pDb, 0);
-  res = sqlite4_open(0, "ondisk.db", &pDb, SQLITE4_OPEN_READWRITE | SQLITE4_OPEN_CREATE,NULL);
-
-  if (res != SQLITE4_OK) 
-  {
-    fprintf(stderr, "failed to open in-memory db\n");
-    exit(res);
-  }
-
-  ri.pDb = pDb;
-  ri.url = "ipc:///tmp/freeqd.ipc";
-
-  sigemptyset(&set);
-  sigaddset(&set, SIGHUP);
-  sigaddset(&set, SIGINT);
-  sigaddset(&set, SIGUSR1);
-  sigaddset(&set, SIGUSR2);
-  sigaddset(&set, SIGALRM);
-  pthread_sigmask(SIG_BLOCK, &set, NULL);
-
-  pthread_create(&t_monitor, 0, &monitor, (void *)&ri);
-  pthread_create(&t_receiver, 0, &receiver, (void *)&ri);
-  pthread_create(&t_sqlserver, 0, &sqlserver, (void *)&ri);
-
-  res = sqlite4_exec(pDb, "create table if not exists freeq_stats(int last);", log_monitor, NULL);
-
-  if (res != SQLITE4_OK) 
-  {
-	  printf("creating freeq_stats failed: %d %s\n", res, sqlite4_errmsg(pDb));
-  }
-
-  while (!recvstop) 
-  {
-	  //printf("running schema dump\n");
-	  //if (sqlite4_exec(pDb, "insert into poop values(1) ;", log_monitor, NULL) != SQLITE4_DONE) {
-	  //        printf("execute failed: %s\n", sqlite4_errmsg(pDb));
-	  //}
-
-	  sleep(5);
-  }
-
-  //return receiver(ctx, "ipc:///tmp/freeqd.ipc", pDb);
-//freeq_unref(&ctx);
-
-
+	if (client_mode) {
+		pthread_create(&t_receiver, 0, &receiver, (void *)&ri);
+		pthread_create(&t_aggtoclient, 0, &aggtoclient, (void *)aggtoclient_nnuri);
+	}
+	
+	// if (freeql_mode)
+	// 	pthread_create(&t_sqlserver, 0, &sqlserver, (void *)&ri);
+ 		
+	res = sqlite4_exec(pDb, "create table if not exists freeq_stats(int last);", log_monitor, NULL);	
+	if (res != SQLITE4_OK) 
+	{
+		printf("creating freeq_stats failed: %d %s\n", res, sqlite4_errmsg(pDb));
+	}
+	
+	while (!recvstop) 
+	{
+		//printf("running schema dump\n");
+		//if (sqlite4_exec(pDb, "insert into poop values(1) ;", log_monitor, NULL) != SQLITE4_DONE) {
+		//        printf("execute failed: %s\n", sqlite4_errmsg(pDb));
+		//}		
+		sleep(5);
+	}	
+	//return receiver(ctx, "ipc:///tmp/freeqd.ipc", pDb);
+	//freeq_unref(&ctx);
+	
 }
 
 static void

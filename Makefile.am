@@ -59,6 +59,37 @@ bin_PROGRAMS = freeqd system_monitor freeql
 lib_LTLIBRARIES = libfreeq-1.0.la
 libfreeq_1_0_la_SOURCES = src/libfreeq.c
 
+noinst_LIBRARIES = libcontrol.a
+libcontrol_a_SOURCES = \
+	control/qsutil.c \
+	control/control.c \
+	control/constmap.c \
+	control/str_len.c \
+	control/stralloc_opys.c \
+	control/open_read.c \
+	control/error.c \
+	control/stralloc_copy.c \
+	control/stralloc_pend.c \
+	control/substdio.c \
+	control/substdio_copy.c \
+	control/getln.c \
+	control/stralloc_catb.c \
+	control/stralloc_opyb.c \
+	control/stralloc_cats.c \
+	control/stralloc_cat.c \
+	control/byte_copy.c \
+	control/byte_cr.c \
+	control/byte_chr.c \
+	control/stralloc_eady.c \
+	control/alloc.c \
+	control/alloc_re.c \
+	control/getln2.c \
+	control/getln.c \
+	control/substdi.c \
+	control/substdo.c
+
+
+
 libfreeq_1_0_la_LIBADD = $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(PROCPS_LIBS)
 
 freeqd_SOURCES = src/freeqd.cc src/system.h
@@ -66,7 +97,7 @@ freeql_SOURCES = src/freeql.cc src/system.h
 system_monitor_SOURCES = src/system_monitor.cc src/system.h
 
 system_monitor_LDADD = $(LIBINTL) $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(PROCPS_LIBS)
-freeqd_LDADD = $(LIBINTL) $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(SQLITE4_LDFLAGS)
+freeqd_LDADD = $(LIBINTL) $(top_builddir)/lib/libfreeq.la libcontrol.a libfreeq-1.0.la $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(SQLITE4_LDFLAGS)
 freeql_LDADD = $(LIBINTL) $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la 
 
 TESTS = check_basic check_msgpack
