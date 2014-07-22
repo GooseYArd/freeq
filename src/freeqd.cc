@@ -69,8 +69,17 @@ typedef std::string tablename;
 typedef std::string provider;
 typedef std::map<tablename, struct freeq_table *> freeq_generation;
 
-static void print_help (void);
-static void print_version (void);
+struct {
+	freeq_generation *gen;
+	time_t era;
+	struct freeq_gen_node *next;
+} freeq_gen_node;
+
+typedef struct freeq_gen_node freeq_gen_node_t;
+freeq_gen_node_t* generations;
+
+//static void print_help (void);
+//static void print_version (void);
 
 const char *freeq_sqlite_typexpr[] = {
 	"NULL",
@@ -822,26 +831,25 @@ notify_clients(void)
 int
 main (int argc, char *argv[])
 {
-	int optc;
-	int lose = 0;
 	int err;
 	int res;
 
-	bool client_mode = false;
-	bool agg_mode = false;
-	bool freeql_mode = false;
+	//bool client_mode = false;
+	//bool agg_mode = false;
+	//bool freeql_mode = false;
 
-	const char *recvinvite_nnuri = "tcp://*:13002";
+	//const char *recvinvite_nnuri = "tcp://*:13002";
 	sigset_t set;
 
-	pthread_t t_receiver;
+	//pthread_t t_receiver;
 	pthread_t t_aggregator;
-	pthread_t t_recvinvite;
-	pthread_t t_monitor;
+	//pthread_t t_recvinvite;
+	//pthread_t t_monitor;
 	//pthread_t t_sqlserver;
-
-	stralloc aggport = {0};
-	stralloc cliport = {0};
+	
+	stralloc clients = {0};
+	//stralloc aggport = {0};
+	//stralloc cliport = {0};
 
 	struct receiver_info ri;
 	set_program_name(argv[0]);
@@ -872,7 +880,7 @@ main (int argc, char *argv[])
 
 	// pthread_create(&t_monitor, 0, &monitor, (void *)&ri);
 
-	if (control_readfile(&clients,"control/clients",1) != 1)
+	if (control_readfile(&clients,(char *)"control/clients",1) != 1)
 	{
 		pthread_create(&t_aggregator, 0, &aggregator, (void *)&ri);
 		//res = sqlite4_open(0, ":memory:", &pDb, 0);
@@ -912,73 +920,73 @@ main (int argc, char *argv[])
 
 }
 
-static void
-print_help (void)
-{
-  /* TRANSLATORS: --help output 1 (synopsis)
-     no-wrap */
-  printf (_("\
-Usage: %s [OPTION]...\n"), program_name);
+// static void
+// print_help (void)
+// {
+//   /* TRANSLATORS: --help output 1 (synopsis)
+//      no-wrap */
+//   printf (_("\
+// Usage: %s [OPTION]...\n"), program_name);
 
-  /* TRANSLATORS: --help output 2 (brief description)
-     no-wrap */
-  fputs (_("\
-Print a friendly, customizable greeting.\n"), stdout);
+//   /* TRANSLATORS: --help output 2 (brief description)
+//      no-wrap */
+//   fputs (_("\
+// Print a friendly, customizable greeting.\n"), stdout);
 
-  puts ("");
-  /* TRANSLATORS: --help output 3: options 1/2
-     no-wrap */
-  fputs (_("\
-  -h, --help          display this help and exit\n\
-  -v, --version       display version information and exit\n"), stdout);
+//   puts ("");
+//   /* TRANSLATORS: --help output 3: options 1/2
+//      no-wrap */
+//   fputs (_("\
+//   -h, --help          display this help and exit\n\
+//   -v, --version       display version information and exit\n"), stdout);
 
-  puts ("");
-  /* TRANSLATORS: --help output 4: options 2/2
-     no-wrap */
-  fputs (_("\
-  -t, --traditional       use traditional greeting\n\
-  -n, --next-generation   use next-generation greeting\n\
-  -g, --greeting=TEXT     use TEXT as the greeting message\n"), stdout);
+//   puts ("");
+//   /* TRANSLATORS: --help output 4: options 2/2
+//      no-wrap */
+//   fputs (_("\
+//   -t, --traditional       use traditional greeting\n\
+//   -n, --next-generation   use next-generation greeting\n\
+//   -g, --greeting=TEXT     use TEXT as the greeting message\n"), stdout);
 
-  printf ("\n");
-  /* TRANSLATORS: --help output 5+ (reports)
-     TRANSLATORS: the placeholder indicates the bug-reporting address
-     for this application.  Please add _another line_ with the
-     address for translation bugs.
-     no-wrap */
-  printf (_("\
-Report bugs to: %s\n"), PACKAGE_BUGREPORT);
-#ifdef PACKAGE_PACKAGER_BUG_REPORTS
-  printf (_("Report %s bugs to: %s\n"), PACKAGE_PACKAGER,
-	  PACKAGE_PACKAGER_BUG_REPORTS);
-#endif
-#ifdef PACKAGE_URL
-  printf (_("%s home page: <%s>\n"), PACKAGE_NAME, PACKAGE_URL);
-#else
-  printf (_("%s home page: <http://www.gnu.org/software/%s/>\n"),
-	  PACKAGE_NAME, PACKAGE);
-#endif
-  fputs (_("General help using GNU software: <http://www.gnu.org/gethelp/>\n"),
-	 stdout);
-}
-
+//   printf ("\n");
+//   /* TRANSLATORS: --help output 5+ (reports)
+//      TRANSLATORS: the placeholder indicates the bug-reporting address
+//      for this application.  Please add _another line_ with the
+//      address for translation bugs.
+//      no-wrap */
+//   printf (_("\
+// Report bugs to: %s\n"), PACKAGE_BUGREPORT);
+// #ifdef PACKAGE_PACKAGER_BUG_REPORTS
+//   printf (_("Report %s bugs to: %s\n"), PACKAGE_PACKAGER,
+// 	  PACKAGE_PACKAGER_BUG_REPORTS);
+// #endif
+// #ifdef PACKAGE_URL
+//   printf (_("%s home page: <%s>\n"), PACKAGE_NAME, PACKAGE_URL);
+// #else
+//   printf (_("%s home page: <http://www.gnu.org/software/%s/>\n"),
+// 	  PACKAGE_NAME, PACKAGE);
+// #endif
+//   fputs (_("General help using GNU software: <http://www.gnu.org/gethelp/>\n"),
+// 	 stdout);
+// }
+// 
 
 
-/* Print version and copyright information.  */
+// /* Print version and copyright information.  */
 
-static void
-print_version (void)
-{
-  printf ("%s (%s) %s\n", PACKAGE, PACKAGE_NAME, VERSION);
-  /* xgettext: no-wrap */
-  puts ("");
+// static void
+// print_version (void)
+// {
+//   printf ("%s (%s) %s\n", PACKAGE, PACKAGE_NAME, VERSION);
+//   /* xgettext: no-wrap */
+//   puts ("");
 
-  /* It is important to separate the year from the rest of the message,
-     as done here, to avoid having to retranslate the message when a new
-     year comes around.  */
-  printf (_("\
-Copyright (C) %d Free Software Foundation, Inc.\n\
-License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\n\
-This is free software: you are free to change and redistribute it.\n\
-There is NO WARRANTY, to the extent permitted by law.\n"), COPYRIGHT_YEAR);
-}
+//   /* It is important to separate the year from the rest of the message,
+//      as done here, to avoid having to retranslate the message when a new
+//      year comes around.  */
+//   printf (_("\
+// Copyright (C) %d Free Software Foundation, Inc.\n\
+// License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\n\
+// This is free software: you are free to change and redistribute it.\n\
+// There is NO WARRANTY, to the extent permitted by law.\n"), COPYRIGHT_YEAR);
+// }
