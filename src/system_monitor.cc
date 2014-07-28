@@ -12,6 +12,8 @@
 #include "freeq/libfreeq.h"
 #include <proc/readproc.h>
 
+#include "ccl/containers.h"
+
 #define NODE0 "node0"
 #define NODE1 "node1"
 
@@ -22,6 +24,38 @@ static const struct option longopts[] = {
         {"help", no_argument, NULL, 'h'},
         {"version", no_argument, NULL, 'v'},
         {NULL, 0, NULL, 0}
+};
+
+const freeq_coltype_t coltypes[] = {        
+        FREEQ_COL_STRING,
+        FREEQ_COL_NUMBER,
+        FREEQ_COL_STRING,
+        FREEQ_COL_NUMBER,
+        FREEQ_COL_NUMBER,
+        FREEQ_COL_NUMBER,
+        FREEQ_COL_NUMBER,
+        FREEQ_COL_NUMBER,
+        FREEQ_COL_NUMBER,
+        FREEQ_COL_NUMBER,
+        FREEQ_COL_NUMBER,
+        FREEQ_COL_NUMBER,
+        FREEQ_COL_NUMBER
+};
+
+const char *colnames[] = {
+        "machineip",
+        "pid",      
+        "command",  
+        "pcpu",     
+        "state",    
+        "priority", 
+        "nice",     
+        "rss",      
+        "vsize",    
+        "euid",     
+        "egid",     
+        "ruid",     
+        "rgid"
 };
 
 static void print_help (void);
@@ -35,10 +69,24 @@ void freeproctab(proc_t ** tab)
   free(tab);
 }
 
+static void PrintStringCollection(strCollection *AL)
+{
+        size_t i;
+        printf("Count %ld, Capacity %ld\n",
+               (long)istrCollection.Size(AL),
+               (long)istrCollection.GetCapacity(AL));
+        for (i=0; i<istrCollection.Size(AL);i++) {
+                printf("%s ",istrCollection.GetElement(AL,i));
+        }
+        printf("\n");
+}
+
+
 void procnothread(const char *machineip)
 {
         struct freeq_ctx *ctx;
-        struct freeq_table *tbl;
+        //struct freeq_table *tbl;
+        proc_t proc_info;
         int err;
 
         err = freeq_new(&ctx, "system_monitor", NULL);
@@ -47,86 +95,77 @@ void procnothread(const char *machineip)
 
         freeq_set_identity(ctx, machineip);
 
-        err = freeq_table_new_from_string(ctx, "procnothread", &tbl);
-        if (err < 0)
-                exit(EXIT_FAILURE);
+        //strCollection *machineips = istrCollection.Create(2);
+        strCollection *cmds = istrCollection.Create(2);
 
-        proc_t** ptab = readproctab(PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLSTATUS);
-        for (tbl->numrows = 0 ; ptab[tbl->numrows] != NULL; tbl->numrows++);
+        PROCTAB* proc = openproc(PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLSTATUS);
 
-        const char* machineips[tbl->numrows];
-        const char* cmds[tbl->numrows];
-        int pids[tbl->numrows];
-        unsigned pcpu[tbl->numrows];
-        char state[tbl->numrows];
-        long priority[tbl->numrows];
-        long nice[tbl->numrows];
-        long rss[tbl->numrows];
-        long vsize[tbl->numrows];
-        int euid[tbl->numrows];
-        int egid[tbl->numrows];
-        int ruid[tbl->numrows];
-        int rgid[tbl->numrows];
+        memset(&proc_info, 0, sizeof(proc_info));
 
-        for (int i = 0; i < tbl->numrows; i++) {
-                machineips[i] = machineip;
-                cmds[i] = ptab[i]->cmd;
-                pids[i] = ptab[i]->ppid;
-                pcpu[i] = ptab[i]->pcpu;
-                state[i] = ptab[i]->state;
-                priority[i] = ptab[i]->priority;
-                nice[i] = ptab[i]->nice;
-                rss[i] = ptab[i]->rss;
-                vsize[i] = ptab[i]->vsize;
-                euid[i] = ptab[i]->euid;
-                egid[i] = ptab[i]->egid;
-                ruid[i] = ptab[i]->ruid;
-                rgid[i] = ptab[i]->rgid;
+        while (readproc(proc, &proc_info) != NULL) {
+                istrCollection.Add(cmds, proc_info.cmd);
         }
 
-        err = freeq_table_column_new(ctx, tbl, "machineip", FREEQ_COL_STRING, machineips, tbl->numrows);
-        if (err < 0)
-                exit(EXIT_FAILURE);
-        err = freeq_table_column_new(ctx, tbl, "pid", FREEQ_COL_NUMBER, pids, tbl->numrows);
-        if (err < 0)
-                exit(EXIT_FAILURE);
-        err = freeq_table_column_new(ctx, tbl, "command", FREEQ_COL_STRING, cmds, tbl->numrows);
-        if (err < 0)
-          exit(EXIT_FAILURE);
-        err = freeq_table_column_new(ctx, tbl, "pcpu", FREEQ_COL_NUMBER, pcpu, tbl->numrows);
-        if (err < 0)
-                exit(EXIT_FAILURE);
-        err = freeq_table_column_new(ctx, tbl, "state", FREEQ_COL_NUMBER, state, tbl->numrows);
-        if (err < 0)
-                exit(EXIT_FAILURE);
-        err = freeq_table_column_new(ctx, tbl, "priority", FREEQ_COL_NUMBER, priority , tbl->numrows);
-        if (err < 0)
-                exit(EXIT_FAILURE);
-        err = freeq_table_column_new(ctx, tbl, "nice", FREEQ_COL_NUMBER, nice, tbl->numrows);
-        if (err < 0)
-                exit(EXIT_FAILURE);
-        err = freeq_table_column_new(ctx, tbl, "rss", FREEQ_COL_NUMBER, rss, tbl->numrows);
-        if (err < 0)
-                exit(EXIT_FAILURE);
-        err = freeq_table_column_new(ctx, tbl, "vsize", FREEQ_COL_NUMBER, vsize , tbl->numrows);
-        if (err < 0)
-          exit(EXIT_FAILURE);
-        err = freeq_table_column_new(ctx, tbl, "euid", FREEQ_COL_NUMBER, euid , tbl->numrows);
-        if (err < 0)
-          exit(EXIT_FAILURE);
-        err = freeq_table_column_new(ctx, tbl, "egid", FREEQ_COL_NUMBER, egid , tbl->numrows);
-        if (err < 0)
-          exit(EXIT_FAILURE);
-        err = freeq_table_column_new(ctx, tbl, "ruid", FREEQ_COL_NUMBER, ruid , tbl->numrows);
-        if (err < 0)
-          exit(EXIT_FAILURE);
-        err = freeq_table_column_new(ctx, tbl, "rgid", FREEQ_COL_NUMBER, rgid , tbl->numrows);
-        if (err < 0)
-                exit(EXIT_FAILURE);
+        PrintStringCollection(cmds);
+        //proc_t** ptab = readproctab(PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLSTATUS);
+        //for (tbl->numrows = 0 ; ptab[tbl->numrows] != NULL; tbl->numrows++);
+                       
+        // const char* machineips[tbl->numrows];
+        // char* cmds[tbl->numrows];
+        // int pids[tbl->numrows];
+        // unsigned pcpu[tbl->numrows];
+        // char state[tbl->numrows];
+        // long priority[tbl->numrows];
+        // long nice[tbl->numrows];
+        // long rss[tbl->numrows];
+        // long vsize[tbl->numrows];
+        // int euid[tbl->numrows];
+        // int egid[tbl->numrows];
+        // int ruid[tbl->numrows];
+        // int rgid[tbl->numrows];
 
-        freeq_table_send(ctx, tbl);
-        freeq_table_unref(tbl);
-        freeproctab(ptab);
+        // for (int i = 0; i < tbl->numrows; i++) {
+        //         machineips[i] = machineip;
+        //         cmds[i] = ptab[i]->cmd;
+        //         pids[i] = ptab[i]->ppid;
+        //         pcpu[i] = ptab[i]->pcpu;
+        //         state[i] = ptab[i]->state;
+        //         priority[i] = ptab[i]->priority;
+        //         nice[i] = ptab[i]->nice;
+        //         rss[i] = ptab[i]->rss;
+        //         vsize[i] = ptab[i]->vsize;
+        //         euid[i] = ptab[i]->euid;
+        //         egid[i] = ptab[i]->egid;
+        //         ruid[i] = ptab[i]->ruid;
+        //         rgid[i] = ptab[i]->rgid;
+        // }
+
+        // err = freeq_table_new(ctx, 
+        //                       "procnothread", 
+        //                       (freeq_coltype_t **)&coltypes, 
+        //                       (char **)colnames, 
+        //                       &tbl,
+        //                       (char *)machineips,
+        //                       pids,
+        //                       cmds,
+        //                       pcpu,
+        //                       state,
+        //                       priority,
+        //                       nice,
+        //                       rss,
+        //                       vsize, 
+        //                       euid,
+        //                       egid, 
+        //                       ruid,
+        //                       rgid);
+
+        // if (err < 0)
+        //         exit(EXIT_FAILURE);
+
+
+        // freeq_table_send(ctx, tbl);
+        // freeq_table_unref(tbl);
+        // freeproctab(ptab);
         freeq_unref(ctx);
 }
 

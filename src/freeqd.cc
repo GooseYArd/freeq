@@ -69,14 +69,14 @@ typedef std::string tablename;
 typedef std::string provider;
 typedef std::map<tablename, struct freeq_table *> freeq_generation;
 
-struct {
-	freeq_generation *gen;
-	time_t era;
-	struct freeq_gen_node *next;
-} freeq_gen_node;
+// struct {
+// 	freeq_generation *gen;
+// 	time_t era;
+// 	struct freeq_gen_node *next;
+// } freeq_gen_node;
 
-typedef struct freeq_gen_node freeq_gen_node_t;
-freeq_gen_node_t* generations;
+// typedef struct freeq_gen_node freeq_gen_node_t;
+// freeq_gen_node_t* generations;
 
 //static void print_help (void);
 //static void print_version (void);
@@ -99,59 +99,58 @@ const freeq_coltype_t sqlite_to_freeq_coltype[] = {
 	FREEQ_COL_NULL,   // 5 SQLITE_NULL
 };
 
-int aggregate_table_segments(struct freeq_ctx *ctx, const char *name, freeq_table *table)
-{
-	typedef std::pair<std::string, int> colsig_t;
-	typedef std::map<colsig_t, int> colprof_t;
-	freeq_table *tbl, *parent, *tail;
-	colprof_t colprof;
-	int numcols = 0;
+// int aggregate_table_segments(struct freeq_ctx *ctx, const char *name, freeq_table *table)
+// {
+// 	typedef std::pair<std::string, int> colsig_t;
+// 	typedef std::map<colsig_t, int> colprof_t;
+// 	freeq_table *tbl, *parent, *tail;
+// 	colprof_t colprof;
+// 	int numcols = 0;
 
-	dbg(ctx, "aggregating segments for table %s\n", name);
+// 	dbg(ctx, "aggregating segments for table %s\n", name);
 
-	tbl = table;
-	while (tbl != NULL)
-	{
-		//dbg(ctx, "ok cool, we parsed %d segment headers.\n", headers.size());
-		freeq_column *c = tbl->columns;
-		numcols = 0;
-		while (c != NULL)
-		{
-			colprof[colsig_t(c->name, c->coltype)]++;
-			c = c->next;
-			numcols++;
-		}
+// 	tbl = table;
+// 	while (tbl != NULL)
+// 	{
+// 		//dbg(ctx, "ok cool, we parsed %d segment headers.\n", headers.size());		
+// 		numcols = 0;
+// 		while (c != NULL)
+// 		{
+// 			colprof[colsig_t(c->name, c->coltype)]++;
+// 			//c = c->next;
+// 			numcols++;
+// 		}
 
-		tail->next = tbl;
-		tail = tail->next;
-		dbg(ctx, "segment %s:%s has %d columns\n", tbl->identity, tbl->name, numcols);
-	}
+// 		tail->next = tbl;
+// 		tail = tail->next;
+// 		dbg(ctx, "segment %s:%s has %d columns\n", tbl->identity, tbl->name, numcols);
+// 	}
 
-	for (colprof_t::iterator it = colprof.begin(); it != colprof.end(); ++it)
-	{
-		if (it->second != numcols)
-		{
-			//consistant = false;
-			dbg(ctx, "inconsistant schema!\n", "");
-			break;
-		}
-	}
+// 	for (colprof_t::iterator it = colprof.begin(); it != colprof.end(); ++it)
+// 	{
+// 		if (it->second != numcols)
+// 		{
+// 			//consistant = false;
+// 			dbg(ctx, "inconsistant schema!\n", "");
+// 			break;
+// 		}
+// 	}
 
-	// TODO: this is a bug
-	tbl = parent->next;
-	while (tbl != NULL)
-	{
-		freeq_column *c = tbl->columns;
-		freeq_column *parc = parent->columns;
-		numcols = 0;
-		while (c != NULL)
-			parent->numrows += freeq_attach_all_segments(c, parc);
-	}
+// 	// TODO: this is a bug
+// 	tbl = parent->next;
+// 	while (tbl != NULL)
+// 	{
+// 		//freeq_column *c = tbl->columns;
+// 		//freeq_column *parc = parent->columns;
+// 		numcols = 0;
+// 		//while (c != NULL)
+// 		//	parent->numrows += freeq_attach_all_segments(c, parc);
+// 	}
 
-	freeq_table_unref(parent->next);
-	// *table = parent;
-	return 0;
-}
+// 	freeq_table_unref(parent->next);
+// 	// *table = parent;
+// 	return 0;
+// }
 
 int drop_table(struct freeq_table *tbl, sqlite4 *mDb)
 {
@@ -170,14 +169,12 @@ int drop_table(struct freeq_table *tbl, sqlite4 *mDb)
 int create_table(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 {
 	std::stringstream stm;
-	struct freeq_column *col = tbl->columns;
 	stm << "CREATE TABLE IF NOT EXISTS " << tbl->name << "(";
-	while (col != NULL)
+	for (int i = 0; i < tbl->numcols; i++)
 	{
-		dbg(ctx, "create_table: type is %d\n", col->coltype);
-		stm << col->name << " " << freeq_sqlite_typexpr[col->coltype];
-		col = col->next;
-		if (col != NULL)
+		dbg(ctx, "create_table: type is %d\n", *(tbl->coltypes + i));
+		stm << *(tbl->colnames + i) << " " << freeq_sqlite_typexpr[*(tbl->coltypes + i)];
+		if (i < (tbl->numcols - 1))		
 			stm << ", ";
 	}
 	stm << ");";
@@ -209,7 +206,6 @@ int to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 	sqlite4_stmt *stmt;
 	const char **strarrp = NULL;
 	int *intarrp = NULL;
-	struct freeq_column *colp;
 	int res;
 
 	if (sqlite4_exec(mDb, "BEGIN TRANSACTION;", NULL, NULL) != SQLITE4_OK)
@@ -237,14 +233,11 @@ int to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 
 	for (unsigned i = 0; i < tbl->numrows; i++)
 	{
-		colp = tbl->columns;
-		struct freeq_column_segment *seg = colp->segments;
-		int j = 1;
-		while (colp != NULL) {
-			seg = colp->segments;
-			strarrp = (const char **)seg->data;
-			intarrp = (int *)seg->data;
-			switch (colp->coltype)
+		for (int j = 0; j < tbl->numcols; j++) 
+		{
+			//strarrp = (const char **)seg->data;
+			//intarrp = (int *)seg->data;
+			switch (*(tbl->coltypes + i))
 			{
 			case FREEQ_COL_STRING:
 				sqlite4_bind_text(stmt, j, strarrp[i], strlen(strarrp[i]), SQLITE4_TRANSIENT, NULL);
@@ -263,7 +256,7 @@ int to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 			default:
 				break;
 			}
-			colp = colp->next;
+			//colp = colp->next;
 			j++;
 		}
 		if (sqlite4_step(stmt) != SQLITE4_DONE)
@@ -476,14 +469,14 @@ void *receiver (void *arg)
 
 		freeq_table *table;
 		dbg(ctx, "receiver(): read %d bytes\n", size);
-		res = freeq_table_header_from_msgpack(ctx, buf, size, &table);
+		//res = freeq_table_header_from_msgpack(ctx, buf, size, &table);
 		if (res)
 		{
 			dbg(ctx, "invalid header in message, rejecting\n");
 			continue;
 		}
 
-		dbg(ctx, "identity: %s name %s rows %d\n", table->identity, table->name, table->numrows);
+		//dbg(ctx, "identity: %s name %s rows %d\n", table->identity, table->name, table->numrows);
 		freeq_generation::iterator it = fg.find(table->name);
 		if (it == fg.end())
 		{
@@ -575,19 +568,19 @@ void* handler(void *paramsd) {
 	char line[MAX_MSG];
 	int res;
 	int client_local;
-	int bsize;
-	const char *s;
-	char **strings;
-	int *vals;
+	//int bsize;
+	//const char *s;
+	//char **strings;
+	//int *vals;
 
 	freeq_ctx *ctx;
-	struct freeq_table *tblp;
-	struct freeq_column *colp;
-	struct freeq_column_segment *seg;
+	//struct freeq_table *tblp;
+	//struct freeq_column *colp;
+	//struct freeq_column_segment *seg;
 
-	sqlite4_stmt *pStmt;
+	//sqlite4_stmt *pStmt;
 	socklen_t addr_len;
-	int segment_size = 2000;
+	//int segment_size = 2000;
 
 	client_local = *((int *)paramsd);
 	addr_len = sizeof(cliAddr);
@@ -603,121 +596,121 @@ void* handler(void *paramsd) {
 		return NULL;
 	}
 
-	while(!recvstop)
-	{
-		res = readline(client_local, line, MAX_MSG);
-		dbg(ctx, "received query from client: \"%s\" res=%d\n", line, res);
-		if (res == 0)
-			break;
+ 	while(!recvstop)
+ 	{
+// 		res = readline(client_local, line, MAX_MSG);
+// 		dbg(ctx, "received query from client: \"%s\" res=%d\n", line, res);
+// 		if (res == 0)
+// 			break;
 
-		if (res == 2)
-			continue;
+// 		if (res == 2)
+// 			continue;
 
-		res = sqlite4_prepare(pDb, line, -1, &pStmt, 0);
-		if (res != SQLITE4_OK)
-		{
-			dbg(ctx, "prepare failed, sending error\n");
-			freeq_error_write_sock(ctx, sqlite4_errmsg(pDb), client_local);
-			sqlite4_finalize(pStmt);
-			continue;
-		}
+// 		res = sqlite4_prepare(pDb, line, -1, &pStmt, 0);
+// 		if (res != SQLITE4_OK)
+// 		{
+// 			dbg(ctx, "prepare failed, sending error\n");
+// 			freeq_error_write_sock(ctx, sqlite4_errmsg(pDb), client_local);
+// 			sqlite4_finalize(pStmt);
+// 			continue;
+// 		}
 
-		/* column type is unset until the query has been
-		 * stepped once */
-		if (sqlite4_step(pStmt) != SQLITE4_ROW)
-		{
-			freeq_error_write_sock(ctx, sqlite4_errmsg(pDb), client_local);
-			sqlite4_finalize(pStmt);
-			continue;
-		}
+// 		/* column type is unset until the query has been
+// 		 * stepped once */
+// 		if (sqlite4_step(pStmt) != SQLITE4_ROW)
+// 		{
+// 			freeq_error_write_sock(ctx, sqlite4_errmsg(pDb), client_local);
+// 			sqlite4_finalize(pStmt);
+// 			continue;
+// 		}
 
-		freeq_table_new_from_string(ctx, "result", &tblp);
-		if (!tblp)
-		{
-			dbg(ctx, "unable to allocate table\n");
-			freeq_error_write_sock(ctx, "ENOMEM", client_local);
-			sqlite4_finalize(pStmt);
-			continue;
-		}
+// 		freeq_table_new_from_string(ctx, "result", &tblp);
+// 		if (!tblp)
+// 		{
+// 			dbg(ctx, "unable to allocate table\n");
+// 			freeq_error_write_sock(ctx, "ENOMEM", client_local);
+// 			sqlite4_finalize(pStmt);
+// 			continue;
+// 		}
 
-		int numcols = sqlite4_column_count(pStmt);
-		dbg(ctx, "creating response table %s, %d columns\n", tblp->name, numcols);
-		int j = 0;
+// 		int numcols = sqlite4_column_count(pStmt);
+// 		dbg(ctx, "creating response table %s, %d columns\n", tblp->name, numcols);
+// 		int j = 0;
 
-		for (int i = 0; i < numcols; i++)
-		{
-			const char *cname = strdup(sqlite4_column_name(pStmt, i));
-			int s4ctype = sqlite4_column_type(pStmt, i);
-			freeq_coltype_t ctype = sqlite_to_freeq_coltype[s4ctype];
-			dbg(ctx, "adding column %s sqlite4_type %d freeq_type %d\n", cname, s4ctype, ctype);
-			res = freeq_table_column_new_empty(ctx, tblp, cname, ctype, &colp, segment_size);
-			if (res < 0)
-			{
-				dbg(ctx, "unable to allocate column\n");
-				freeq_error_write_sock(ctx, "ENOMEM", client_local);
-				sqlite4_finalize(pStmt);
-				freeq_table_unref(tblp);
-				continue;
-			}
-		}
+// 		for (int i = 0; i < numcols; i++)
+// 		{
+// 			const char *cname = strdup(sqlite4_column_name(pStmt, i));
+// 			int s4ctype = sqlite4_column_type(pStmt, i);
+// 			freeq_coltype_t ctype = sqlite_to_freeq_coltype[s4ctype];
+// 			dbg(ctx, "adding column %s sqlite4_type %d freeq_type %d\n", cname, s4ctype, ctype);
+// 			res = freeq_table_column_new_empty(ctx, tblp, cname, ctype, &colp, segment_size);
+// 			if (res < 0)
+// 			{
+// 				dbg(ctx, "unable to allocate column\n");
+// 				freeq_error_write_sock(ctx, "ENOMEM", client_local);
+// 				sqlite4_finalize(pStmt);
+// 				freeq_table_unref(tblp);
+// 				continue;
+// 			}
+// 		}
 
-		do {
-			if (j >= segment_size)
-			{
-				// pack and send table, flag continuation
-				//send(client_local, "segment\n", 8, 0);
-				tblp->numrows = 0;
-				j = 0;
-			}
+// 		do {
+// 			if (j >= segment_size)
+// 			{
+// 				// pack and send table, flag continuation
+// 				//send(client_local, "segment\n", 8, 0);
+// 				tblp->numrows = 0;
+// 				j = 0;
+// 			}
 
-			dbg(ctx, "handling row %d\n", j);
-			colp = tblp->columns;
-			for (int i = 0; i < numcols; i++)
-			{
-				seg = colp->segments;
-				switch (colp->coltype) {
-				case FREEQ_COL_STRING:
-					strings = (char **)seg->data;
-					s = sqlite4_column_text(pStmt, i, &bsize);
-					strings[j] = strndup(s, bsize);
-					break;
-				case FREEQ_COL_NUMBER:
-					vals = (int *)seg->data;
-					vals[j] = sqlite4_column_int(pStmt, i);
-					break;
-				default:
-					break;
-				}
-				colp = colp->next;
-			}
+// 			dbg(ctx, "handling row %d\n", j);
+// 			colp = tblp->columns;
+// 			for (int i = 0; i < numcols; i++)
+// 			{
+// 				seg = colp->segments;
+// 				switch (colp->coltype) {
+// 				case FREEQ_COL_STRING:
+// 					strings = (char **)seg->data;
+// 					s = sqlite4_column_text(pStmt, i, &bsize);
+// 					strings[j] = strndup(s, bsize);
+// 					break;
+// 				case FREEQ_COL_NUMBER:
+// 					vals = (int *)seg->data;
+// 					vals[j] = sqlite4_column_int(pStmt, i);
+// 					break;
+// 				default:
+// 					break;
+// 				}
+// 				colp = colp->next;
+// 			}
 
-			dbg(ctx, "setting all segments to len %d\n", j);
-			colp = tblp->columns;
-			while (colp != NULL)
-			{
-				colp->segments->len = j+1;
-				colp = colp->next;
-			}
+// 			dbg(ctx, "setting all segments to len %d\n", j);
+// 			colp = tblp->columns;
+// 			while (colp != NULL)
+// 			{
+// 				colp->segments->len = j+1;
+// 				colp = colp->next;
+// 			}
 
-			dbg(ctx, "setting table to len %d\n", j);
-			tblp->numrows = j+1;
-			j++;
+// 			dbg(ctx, "setting table to len %d\n", j);
+// 			tblp->numrows = j+1;
+// 			j++;
 
-		} while (sqlite4_step(pStmt) == SQLITE4_ROW);
+// 		} while (sqlite4_step(pStmt) == SQLITE4_ROW);
 
 
-		dbg(ctx, "setting table, length %d\n", tblp->numrows);
-		sqlite4_finalize(pStmt);
-		// pack and send table, flag no continuation
-		dbg(ctx, "sending result");
-		freeq_table_write_sock(ctx, tblp, client_local);
-		memset(line, 0, MAX_MSG);
-		freeq_table_unref(tblp);
-
-	}
-	freeq_unref(ctx);
-	close(client_local);
-}
+// 		//dbg(ctx, "setting table, length %d\n", tblp->numrows);
+// 		sqlite4_finalize(pStmt);
+// 		// pack and send table, flag no continuation
+// 		dbg(ctx, "sending result");
+// 		freeq_table_write_sock(ctx, tblp, client_local);
+// 		memset(line, 0, MAX_MSG);
+// 		freeq_table_unref(tblp);
+		sleep(1);
+ 	}
+ 	freeq_unref(ctx);
+ 	close(client_local);
+ }
 
 
 void *sqlserver(void *arg) {

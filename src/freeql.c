@@ -50,7 +50,7 @@ main (int argc, char *argv[])
   const char *node_name = _("localhost");
   char *sql;
   struct freeq_ctx *ctx;
-  struct freeq_table *table;
+  //struct freeq_table *table;
   int sock;
   struct sockaddr_in servername;
 
@@ -134,14 +134,14 @@ main (int argc, char *argv[])
   
   freeq_set_log_priority(ctx, 10);
   
-  err = freeq_table_header_from_msgpack(ctx, buf, nbytes, &table);
+  // err = freeq_table_header_from_msgpack(ctx, buf, nbytes, &table);
   if (err) {
     dbg(ctx, "invalid header in message, rejecting\n");
   } else {  
     printf("Read %d bytes from server, table ok\n", nbytes);
   }
   
-  freeq_table_to_text(ctx, table);
+  //freeq_table_to_text(ctx, table);
 
   close (sock);
   exit (EXIT_SUCCESS);

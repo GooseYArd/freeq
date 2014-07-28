@@ -42,9 +42,9 @@ struct freeq_table_header *freeq_table_header_unref(struct freeq_ctx *ctx, struc
 
 int freeq_new(struct freeq_ctx **ctx, const char *appname, const char *identity);
 void freeq_set_log_fn(struct freeq_ctx *ctx,
-                  void (*log_fn)(struct freeq_ctx *ctx,
-                                 int priority, const char *file, int line, const char *fn,
-                                 const char *format, va_list args));
+		  void (*log_fn)(struct freeq_ctx *ctx,
+				 int priority, const char *file, int line, const char *fn,
+				 const char *format, va_list args));
 int freeq_get_log_priority(struct freeq_ctx *ctx);
 void freeq_set_log_priority(struct freeq_ctx *ctx, int priority);
 const char *freeq_get_identity(struct freeq_ctx *ctx);
@@ -56,73 +56,64 @@ void freeq_set_identity(struct freeq_ctx *ctx, const char *identity);
  * access to freeq generated lists
  */
 
-typedef enum 
+typedef enum
 {
 	FREEQ_COL_NULL,
-	FREEQ_COL_STRING, 
-	FREEQ_COL_NUMBER, 
+	FREEQ_COL_STRING,
+	FREEQ_COL_NUMBER,
 	FREEQ_COL_TIME,
 	FREEQ_COL_IPV4ADDR,
 	FREEQ_COL_IPV6ADDR,
 } freeq_coltype_t;
-
-struct freeq_column_segment {
-	size_t len;
-	void **data;
-	int refcount;
-	struct freeq_column_segment *next;
-};
-
-struct freeq_column {
-	const char *name;
-	freeq_coltype_t coltype;
-	struct freeq_column *next;
-	int refcount;
-	struct freeq_column_segment *segments;
-};
-
-struct freeq_table {
+	
+struct freeq_table {	
 	struct freeq_ctx *ctx;
-	const char *name;
-	const char *identity;
-	int numcols;
-	int numrows;
-	struct freeq_column *columns;
 	int refcount;
+	int numrows;
+	const char *name;
+	const char *identity;	
+	int numcols;
+	freeq_coltype_t *coltypes;	
+	char **colnames;
+	void **coldata;
 	struct freeq_table *next;
 };
 
-int freeq_table_column_new(struct freeq_ctx *ctx, 
-			   struct freeq_table *table, 
-			   const char *name, 
-			   freeq_coltype_t coltype, 
-			   void *data, 
+void freeq_table_print(struct freeq_ctx *ctx,
+		       struct freeq_table *table,
+		       FILE *f);
+
+int freeq_table_column_new(struct freeq_ctx *ctx,
+			   struct freeq_table *table,
+			   const char *name,
+			   freeq_coltype_t coltype,
+			   void *data,
 			   size_t len);
 
-int freeq_table_column_new_empty(struct freeq_ctx *ctx, 
-				 struct freeq_table *table, 
-				 const char *name, 
-				 freeq_coltype_t coltype, 
-				 struct freeq_column **colp, 
-				 size_t len);
+/* int freeq_table_column_new_empty(struct freeq_ctx *ctx, */
+/* 				 struct freeq_table *table, */
+/* 				 const char *name, */
+/* 				 freeq_coltype_t coltype, */
+/* 				 struct freeq_column **colp, */
+/* 				 size_t len); */
 
-int freeq_attach_all_segments(struct freeq_column *from, struct freeq_column *to);
-struct freeq_column *freeq_column_get_next(struct freeq_column *column);
-struct freeq_column *freeq_column_unref(struct freeq_column *column);
-struct freeq_column_segment *freeq_column_segment_unref(struct freeq_column_segment *segment);
-const char *freeq_column_get_name(struct freeq_column *column);
-const char *freeq_column_get_value(struct freeq_column *column);
-#define freeq_column_foreach(column, first_entry) \
-        for (column = first_entry; \
-             column != NULL; \
-             column = freeq_column_get_next(column))
+//int freeq_attach_all_segments(struct freeq_column *from, struct freeq_column *to);
+/* struct freeq_column *freeq_column_get_next(struct freeq_column *column); */
+/* struct freeq_column *freeq_column_unref(struct freeq_column *column); */
+/* struct freeq_column_segment *freeq_column_segment_unref(struct freeq_column_segment *segment); */
+/* const char *freeq_column_get_name(struct freeq_column *column); */
+/* const char *freeq_column_get_value(struct freeq_column *column); */
+/* #define freeq_column_foreach(column, first_entry) \ */
+/* 	for (column = first_entry; \ */
+/* 	     column != NULL; \ */
+/* 	     column = freeq_column_get_next(column)) */
 
 /*
  * freeq_table
  *
  * access to tables of freeq
  */
-         
+
 struct freeq_table *freeq_table_ref(struct freeq_table *table);
 struct freeq_table *freeq_table_unref(struct freeq_table *table);
 struct freeq_ctx *freeq_table_get_ctx(struct freeq_table *table);
@@ -131,10 +122,16 @@ int freeq_table_send(struct freeq_ctx *c, struct freeq_table *table);
 int freeq_table_write_sock(struct freeq_ctx *c, struct freeq_table *table, int sock);
 int freeq_error_write_sock(struct freeq_ctx *ctx, const char *errmsg, int sock);
 int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ctx *ctx, struct freeq_table *table);
-int freeq_table_new_from_string(struct freeq_ctx *ctx, const char *string, struct freeq_table **table);
+
+int freeq_table_new(struct freeq_ctx *ctx,
+		    const char *string,
+		    freeq_coltype_t **coltypes,
+		    char **colnames,
+		    struct freeq_table **table, ...);
+
 int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *buf, size_t bufsize, struct freeq_table **table);
 int freeq_table_to_text(struct freeq_ctx *ctx, struct freeq_table *table);
-struct freeq_column *freeq_table_get_some_column(struct freeq_table *table);
+//struct freeq_column *freeq_table_get_some_column(struct freeq_table *table);
 
 #ifdef __cplusplus
 } /* extern "C" */
