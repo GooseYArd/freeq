@@ -35,6 +35,7 @@
 
 #include <nanomsg/nn.h>
 #include <nanomsg/pipeline.h>
+
 /**
  * SECTION:libfreeq
  * @short_description: libfreeq context
@@ -58,6 +59,8 @@ struct freeq_ctx {
 	const char* url;
 	const char* appname;
 	int log_priority;
+	strCollection *errcol;
+	
 };
 
 FREEQ_EXPORT void freeq_log(struct freeq_ctx *ctx,
@@ -152,6 +155,7 @@ FREEQ_EXPORT int freeq_new(struct freeq_ctx **ctx, const char *appname, const ch
 	c->log_priority = LOG_ERR;
 	c->appname = appname;
 	c->identity = identity;
+	c->errcol = istrCollection.Create(1);
 
 	/* environment overwrites config */
 	env = secure_getenv("FREEQ_LOG");
@@ -248,9 +252,9 @@ FREEQ_EXPORT void freeq_set_log_priority(struct freeq_ctx *ctx, int priority)
   ctx->log_priority = priority;
 }
 
-struct freeq_column *freeq_column_get_next(struct freeq_column *column);
-const char *freeq_column_get_name(struct freeq_column *column);
-const char *freeq_column_get_value(struct freeq_column *column);
+//struct freeq_column *freeq_column_get_next(struct freeq_column *column);
+//const char *freeq_column_get_name(struct freeq_column *column);
+//const char *freeq_column_get_value(struct freeq_column *column);
 
 FREEQ_EXPORT struct freeq_table *freeq_table_ref(struct freeq_table *table)
 {
@@ -323,19 +327,14 @@ FREEQ_EXPORT struct freeq_ctx *freeq_table_get_ctx(struct freeq_table *table)
 FREEQ_EXPORT int freeq_error_write_sock(struct freeq_ctx *ctx, const char *errmsg, int sock)
 {
 	struct freeq_table errtbl;	
-
-	void* data[] = { (void *)&errmsg };
-
-	freeq_coltype_t coltypes[] = { FREEQ_COL_STRING };
-	char *colnames[] = { "error" };
+	
+	//freeq_coltype_t coltypes[] = { FREEQ_COL_STRING };
+	//char *colnames[] = { "error" };
 	
 	errtbl.name = "error";
 	errtbl.numcols = 1;
 	errtbl.numrows = 1;
-	errtbl.coltypes = coltypes;
-	errtbl.colnames = colnames;
-	errtbl.coldata = data;
-	
+		
 	dbg(ctx, "generated error table, sending...\n");
 	return freeq_table_write_sock(ctx, &errtbl, sock);
 }
@@ -350,16 +349,17 @@ FREEQ_EXPORT void freeq_table_print(struct freeq_ctx *ctx,
 
 FREEQ_EXPORT int freeq_table_new(struct freeq_ctx *ctx,
 				 const char *name,
+				 int numcols,
 				 freeq_coltype_t **coltypes,
 				 char **colnames,
 				 struct freeq_table **table,
 				 ...)
 {
-	//void **data;
+	
 	va_list argp;
 	struct freeq_table *t;
 
-	t = calloc(1, sizeof(struct freeq_table));
+	t = malloc(sizeof(struct freeq_table) + sizeof(union freeq_column) * numcols);
 	if (!t)
 		return -ENOMEM;
 
@@ -368,37 +368,23 @@ FREEQ_EXPORT int freeq_table_new(struct freeq_ctx *ctx,
 	//t->numrows = 0;
 	t->refcount = 1;
 	t->ctx = ctx;
-	
-	t->coltypes = calloc(t->numcols, sizeof(freeq_coltype_t));
-	if (!t->coltypes)
-	{
-		free(t);
-		return -ENOMEM;
-	}
-
-	t->colnames = calloc(t->numcols, sizeof(char *));
-	if (!t->colnames)
-	{
-		free(&(t->coltypes));	
-		free(t);
-		return -ENOMEM;
-	}
-	
-	t->coldata = calloc(t->numcols, sizeof(void **));
-	if (!t->coldata)
-	{
-		free(&(t->colnames));
-		free(&(t->coltypes));
-		free(t);
-		return -ENOMEM;
-	}
-	
+		
 	va_start(argp, table);
 	for (int i = 0; i < t->numcols; i++) 
 	{
-		t->colnames[i] = strdup(colnames[i]);
-		t->coltypes[i] = *(*(coltypes + i));
-		t->coldata[i] = va_arg(argp, void**);
+		t->columns[i]->name = strdup(colnames[i]);
+		t->columns[i]->coltype = *(*(coltypes + i));
+		switch (t->columns[i]->coltype)
+		{
+		case FREEQ_COL_STRING:
+			t->columns[i]->strcol = va_arg(argp, strCollection*);
+			break;
+		case FREEQ_COL_NUMBER:
+			t->columns[i]->intcol = va_arg(argp, ValArrayInt*);
+			break;
+		default:
+			break;
+		}
 	}
 
 	*table = t;
@@ -512,10 +498,10 @@ FREEQ_EXPORT int freeq_table_new(struct freeq_ctx *ctx,
 /* } */
 
 
-FREEQ_EXPORT struct freeq_column *freeq_table_get_some_column(struct freeq_table *table)
-{
-	return NULL;
-}
+//FREEQ_EXPORT struct freeq_column *freeq_table_get_some_column(struct freeq_table *table)
+//{
+//	return NULL;
+//}
 
 FREEQ_EXPORT int freeq_table_send(struct freeq_ctx *ctx, struct freeq_table *table)
 {
@@ -581,14 +567,14 @@ int sock;
 	write(sock, &(t->numcols), sizeof(int));
 
 	for (i=0; i < t->numcols; i++) 
-		write(sock, &(t->coltypes[i]), sizeof(freeq_coltype_t));
+		write(sock, &(t->columns[i]->coltype), sizeof(freeq_coltype_t));
 	
 	for (i=0; i < t->numcols; i++)
-		write(sock, &(t->colnames[i]), strlen(t->colnames[i]) + 1);
+		write(sock, &(t->columns[i]->name), strlen(t->columns[i]->name) + 1);
 	
 	for (int i=0; i < t->numcols; i++) 
 	{
-		switch (*(t->coltypes + i))
+		switch (t->columns[i]->coltype)
 		{
 		case FREEQ_COL_STRING:			
 			break;

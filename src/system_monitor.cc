@@ -85,7 +85,7 @@ static void PrintStringCollection(strCollection *AL)
 void procnothread(const char *machineip)
 {
         struct freeq_ctx *ctx;
-        //struct freeq_table *tbl;
+        struct freeq_table *tbl;
         proc_t proc_info;
         int err;
 
@@ -95,69 +95,59 @@ void procnothread(const char *machineip)
 
         freeq_set_identity(ctx, machineip);
 
-        //strCollection *machineips = istrCollection.Create(2);
+        strCollection *machineips = istrCollection.Create(2);
         strCollection *cmds = istrCollection.Create(2);
-
+        ValArrayInt *pids = iValArrayInt.Create(100);
+        ValArrayInt *pcpu = iValArrayInt.Create(100);
+        ValArrayInt *state = iValArrayInt.Create(100);
+        ValArrayInt *priority = iValArrayInt.Create(100);
+        ValArrayInt *rss = iValArrayInt.Create(100);
+        ValArrayInt *vsize = iValArrayInt.Create(100);
+        ValArrayInt *euid = iValArrayInt.Create(100);
+        ValArrayInt *egid = iValArrayInt.Create(100);
+        ValArrayInt *ruid = iValArrayInt.Create(100);
+        ValArrayInt *rgid = iValArrayInt.Create(100);
+        
         PROCTAB* proc = openproc(PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLSTATUS);
 
         memset(&proc_info, 0, sizeof(proc_info));
 
         while (readproc(proc, &proc_info) != NULL) {
+                istrCollection.Add(machineips, "1.2.3.4");
                 istrCollection.Add(cmds, proc_info.cmd);
+                iValArrayInt.Add(pids, proc_info.ppid);
+                iValArrayInt.Add(pcpu, proc_info.pcpu);
+                iValArrayInt.Add(state, proc_info.state);
+                iValArrayInt.Add(priority, proc_info.priority);
+                iValArrayInt.Add(rss, proc_info.rss);
+                iValArrayInt.Add(vsize, proc_info.vsize);
+                iValArrayInt.Add(euid, proc_info.euid);
+                iValArrayInt.Add(egid, proc_info.egid);
+                iValArrayInt.Add(ruid, proc_info.ruid);
+                iValArrayInt.Add(rgid, proc_info.rgid);
         }
 
         PrintStringCollection(cmds);
-        //proc_t** ptab = readproctab(PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLSTATUS);
-        //for (tbl->numrows = 0 ; ptab[tbl->numrows] != NULL; tbl->numrows++);
-                       
-        // const char* machineips[tbl->numrows];
-        // char* cmds[tbl->numrows];
-        // int pids[tbl->numrows];
-        // unsigned pcpu[tbl->numrows];
-        // char state[tbl->numrows];
-        // long priority[tbl->numrows];
-        // long nice[tbl->numrows];
-        // long rss[tbl->numrows];
-        // long vsize[tbl->numrows];
-        // int euid[tbl->numrows];
-        // int egid[tbl->numrows];
-        // int ruid[tbl->numrows];
-        // int rgid[tbl->numrows];
 
-        // for (int i = 0; i < tbl->numrows; i++) {
-        //         machineips[i] = machineip;
-        //         cmds[i] = ptab[i]->cmd;
-        //         pids[i] = ptab[i]->ppid;
-        //         pcpu[i] = ptab[i]->pcpu;
-        //         state[i] = ptab[i]->state;
-        //         priority[i] = ptab[i]->priority;
-        //         nice[i] = ptab[i]->nice;
-        //         rss[i] = ptab[i]->rss;
-        //         vsize[i] = ptab[i]->vsize;
-        //         euid[i] = ptab[i]->euid;
-        //         egid[i] = ptab[i]->egid;
-        //         ruid[i] = ptab[i]->ruid;
-        //         rgid[i] = ptab[i]->rgid;
-        // }
-
-        // err = freeq_table_new(ctx, 
-        //                       "procnothread", 
-        //                       (freeq_coltype_t **)&coltypes, 
-        //                       (char **)colnames, 
-        //                       &tbl,
-        //                       (char *)machineips,
-        //                       pids,
-        //                       cmds,
-        //                       pcpu,
-        //                       state,
-        //                       priority,
-        //                       nice,
-        //                       rss,
-        //                       vsize, 
-        //                       euid,
-        //                       egid, 
-        //                       ruid,
-        //                       rgid);
+        err = freeq_table_new(ctx, 
+                              "procnothread", 
+                              12,
+                              (freeq_coltype_t **)&coltypes, 
+                              (char **)colnames, 
+                              &tbl,
+                              (char *)machineips,
+                              pids,
+                              cmds,
+                              pcpu,
+                              state,
+                              priority,
+                              nice,
+                              rss,
+                              vsize, 
+                              euid,
+                              egid, 
+                              ruid,
+                              rgid);
 
         // if (err < 0)
         //         exit(EXIT_FAILURE);
@@ -171,9 +161,7 @@ void procnothread(const char *machineip)
 
 int publisher (const char *url, const char *agent, const char *node_name)
 {
-
   procnothread(node_name);
-
 }
 
 int

@@ -60,12 +60,15 @@ SUBDIRS = po
 
 bin_PROGRAMS = freeqd system_monitor freeql stest
 
-lib_LTLIBRARIES = libfreeq-1.0.la
+lib_LTLIBRARIES = \
+	libfreeq-1.0.la \
+	libfreeqccl-1.0.la
+
 libfreeq_1_0_la_SOURCES = src/libfreeq.c
 
-noinst_LIBRARIES = libcontrol.a libccl.a
+noinst_LIBRARIES = libcontrol.a
 
-libccl_a_SOURCES = \
+libfreeqccl_1_0_la_SOURCES = \
 	ccl/vector.c \
 	ccl/bloom.c \
 	ccl/error.c \
@@ -90,8 +93,6 @@ libccl_a_SOURCES = \
 	ccl/strcollection.c \
 	ccl/searchtree.c \
 	ccl/containers.h \
-	ccl/ccl_internal.h \
-	ccl/redblacktree.c \
 	ccl/fgetline.c \
 	ccl/generic.c \
 	ccl/queue.c \
@@ -146,18 +147,34 @@ libcontrol_a_SOURCES = \
 	control/substdo.c
 
 
-libfreeq_1_0_la_LIBADD = $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(PROCPS_LIBS)
+libfreeq_1_0_la_LIBADD = $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(PROCPS_LIBS) libfreeqccl-1.0.la
 
 stest_SOURCES = src/stest.c src/system.h
 freeqd_SOURCES = src/freeqd.cc src/system.h
 freeql_SOURCES = src/freeql.cc src/system.h
 system_monitor_SOURCES = src/system_monitor.cc src/system.h
 
-system_monitor_LDADD = $(LIBINTL) libccl.a $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(PROCPS_LIBS)
-freeqd_LDADD = $(LIBINTL) $(top_builddir)/lib/libfreeq.la libcontrol.a libfreeq-1.0.la $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(SQLITE4_LDFLAGS)
+system_monitor_LDADD = \
+	$(LIBINTL) \
+	$(top_builddir)/lib/libfreeq.la \
+	libfreeqccl-1.0.la \
+	libfreeq-1.0.la \
+	$(NANOMSG_LDFLAGS) \
+	$(MSGPACK_LIBS) \
+	$(PROCPS_LIBS)
+
+freeqd_LDADD = \
+	$(LIBINTL) \
+	$(top_builddir)/lib/libfreeq.la \
+	libcontrol.a \
+	libfreeq-1.0.la \
+	$(NANOMSG_LDFLAGS) \
+	$(MSGPACK_LIBS) \
+	$(SQLITE4_LDFLAGS)
+
 freeql_LDADD = $(LIBINTL) $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la 
 
-stest_LDADD = $(LIBINTL) libccl.a libcontrol.a  $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la $(CCL_LIBS) -lglib-2.0
+stest_LDADD = $(LIBINTL) libcontrol.a $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la $(CCL_LIBS) -lglib-2.0
 
 TESTS = check_basic check_msgpack
 

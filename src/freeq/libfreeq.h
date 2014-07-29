@@ -27,7 +27,7 @@
 extern "C" {
 #endif
 #include "msgpack.h"
-
+#include "containers.h"
 /*
  * freeq_ctx
  *
@@ -66,6 +66,13 @@ typedef enum
 	FREEQ_COL_IPV6ADDR,
 } freeq_coltype_t;
 	
+union freeq_column {
+	freeq_coltype_t coltype;
+	char *name;
+	strCollection *strcol;
+	ValArrayInt *intcol;
+};
+
 struct freeq_table {	
 	struct freeq_ctx *ctx;
 	int refcount;
@@ -73,10 +80,8 @@ struct freeq_table {
 	const char *name;
 	const char *identity;	
 	int numcols;
-	freeq_coltype_t *coltypes;	
-	char **colnames;
-	void **coldata;
 	struct freeq_table *next;
+	union freeq_column *columns[];
 };
 
 void freeq_table_print(struct freeq_ctx *ctx,
@@ -125,6 +130,7 @@ int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ctx *ctx, struc
 
 int freeq_table_new(struct freeq_ctx *ctx,
 		    const char *string,
+		    int numcols,
 		    freeq_coltype_t **coltypes,
 		    char **colnames,
 		    struct freeq_table **table, ...);
