@@ -172,8 +172,8 @@ int create_table(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 	stm << "CREATE TABLE IF NOT EXISTS " << tbl->name << "(";
 	for (int i = 0; i < tbl->numcols; i++)
 	{
-		dbg(ctx, "create_table: type is %d\n", *(tbl->coltypes + i));
-		stm << *(tbl->colnames + i) << " " << freeq_sqlite_typexpr[*(tbl->coltypes + i)];
+		dbg(ctx, "create_table: type is %d\n", tbl->columns[i].coltype);
+		stm << tbl->columns[i].name << " " << freeq_sqlite_typexpr[tbl->columns[i].coltype];
 		if (i < (tbl->numcols - 1))		
 			stm << ", ";
 	}
@@ -237,7 +237,7 @@ int to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 		{
 			//strarrp = (const char **)seg->data;
 			//intarrp = (int *)seg->data;
-			switch (*(tbl->coltypes + i))
+			switch (tbl->columns[i].coltype)
 			{
 			case FREEQ_COL_STRING:
 				sqlite4_bind_text(stmt, j, strarrp[i], strlen(strarrp[i]), SQLITE4_TRANSIENT, NULL);

@@ -58,6 +58,10 @@
 #define CONTAINER_ERROR_WRONG_ITERATOR	-24
 #define CONTAINER_ERROR_LAST_CODE       -30
 
+#ifdef __cplusplus 
+extern "C" {
+#endif
+
 typedef void *(*ErrorFunction)(const char *,int,...);
 typedef int (*DestructorFunction)(void *);
 typedef size_t (*HashFunction)(const char *); /* For the dictionary container */
@@ -1191,4 +1195,9 @@ typedef struct tagObserverInterface {
     size_t (*Unsubscribe)(void *ObservedObject,ObserverFunction callback);
 } ObserverInterface;
 extern ObserverInterface iObserver;
+#ifdef __cplusplus 
+}
 #endif
+#endif
+
+

@@ -2,6 +2,10 @@
 #include "system.h"
 #include "progname.h"
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
@@ -26,7 +30,7 @@ static const struct option longopts[] = {
         {NULL, 0, NULL, 0}
 };
 
-const freeq_coltype_t coltypes[] = {        
+freeq_coltype_t coltypes[] = {        
         FREEQ_COL_STRING,
         FREEQ_COL_NUMBER,
         FREEQ_COL_STRING,
@@ -132,8 +136,8 @@ void procnothread(const char *machineip)
         err = freeq_table_new(ctx, 
                               "procnothread", 
                               12,
-                              (freeq_coltype_t **)&coltypes, 
-                              (char **)colnames, 
+                              (freeq_coltype_t *)&coltypes, 
+                              (const char **)&colnames, 
                               &tbl,
                               (char *)machineips,
                               pids,
@@ -152,11 +156,17 @@ void procnothread(const char *machineip)
         // if (err < 0)
         //         exit(EXIT_FAILURE);
 
+        //freeq_table_send(ctx, tbl);
+        
+        mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+        int f = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode);
+ 
+        freeq_table_write(ctx, tbl, f);
+        close(f);
 
-        // freeq_table_send(ctx, tbl);
-        // freeq_table_unref(tbl);
-        // freeproctab(ptab);
-        freeq_unref(ctx);
+        //freeq_table_unref(tbl);
+        //closeproc(proc);        
+        //freeq_unref(ctx);
 }
 
 int publisher (const char *url, const char *agent, const char *node_name)

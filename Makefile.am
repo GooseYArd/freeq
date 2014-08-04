@@ -41,7 +41,8 @@ AM_CPPFLAGS = \
 AM_CFLAGS = ${my_CFLAGS} \
 	-fvisibility=hidden \
 	-ffunction-sections \
-	-fdata-sections
+	-fdata-sections \
+	-fPIC
 
 AM_LDFLAGS = \
 	-Wl,--gc-sections \
@@ -61,14 +62,13 @@ SUBDIRS = po
 bin_PROGRAMS = freeqd system_monitor freeql stest
 
 lib_LTLIBRARIES = \
-	libfreeq-1.0.la \
-	libfreeqccl-1.0.la
+	libfreeq-1.0.la
 
 libfreeq_1_0_la_SOURCES = src/libfreeq.c
 
-noinst_LIBRARIES = libcontrol.a
+noinst_LIBRARIES = libcontrol.a libccl.a
 
-libfreeqccl_1_0_la_SOURCES = \
+libccl_a_SOURCES = \
 	ccl/vector.c \
 	ccl/bloom.c \
 	ccl/error.c \
@@ -147,7 +147,7 @@ libcontrol_a_SOURCES = \
 	control/substdo.c
 
 
-libfreeq_1_0_la_LIBADD = $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(PROCPS_LIBS) libfreeqccl-1.0.la
+libfreeq_1_0_la_LIBADD = $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(PROCPS_LIBS) libccl.a
 
 stest_SOURCES = src/stest.c src/system.h
 freeqd_SOURCES = src/freeqd.cc src/system.h
@@ -157,8 +157,8 @@ system_monitor_SOURCES = src/system_monitor.cc src/system.h
 system_monitor_LDADD = \
 	$(LIBINTL) \
 	$(top_builddir)/lib/libfreeq.la \
-	libfreeqccl-1.0.la \
 	libfreeq-1.0.la \
+	libccl.a \
 	$(NANOMSG_LDFLAGS) \
 	$(MSGPACK_LIBS) \
 	$(PROCPS_LIBS)
@@ -174,7 +174,7 @@ freeqd_LDADD = \
 
 freeql_LDADD = $(LIBINTL) $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la 
 
-stest_LDADD = $(LIBINTL) libcontrol.a $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la $(CCL_LIBS) -lglib-2.0
+stest_LDADD = $(LIBINTL) libcontrol.a $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la $(CCL_LIBS) libccl.a
 
 TESTS = check_basic check_msgpack
 

@@ -28,10 +28,12 @@
 #include <string.h>
 #include <ctype.h>
 #include <assert.h>
+#include <stdbool.h>
 
 #include <freeq/libfreeq.h>
 #include "libfreeq-private.h"
 #include "msgpack.h"
+#include "containers.h"
 
 #include <nanomsg/nn.h>
 #include <nanomsg/pipeline.h>
@@ -340,52 +342,101 @@ FREEQ_EXPORT int freeq_error_write_sock(struct freeq_ctx *ctx, const char *errms
 }
 
 FREEQ_EXPORT void freeq_table_print(struct freeq_ctx *ctx,
-				    struct freeq_table *table,
+				    struct freeq_table *t,
 				    FILE *f)
 {
-	fprintf(f, "name: %s\n", table->name);
+	fprintf(f, "name: %s\n", t->name);
+	for (int j = 0; j < t->numcols; j++) {
+		fprintf(f, "%s", t->columns[j].name);
+		fprintf(f, j < (t->numcols - 1) ? "," : "\n");
+	}
+
+	dbg(ctx, "numrows: %d\n", t->numrows);
+	for (int i = 0; i < t->numrows; i++) {
+		for (int j = 0; j < t->numcols; j++) {
+			switch (t->columns[j].coltype)
+			{
+			case FREEQ_COL_STRING:
+				fprintf(stderr, "reading element from coll %d %x\n", j, t->columns[j].data.strcol);
+				fprintf(f, "%s", istrCollection.GetElement(t->columns[j].data.strcol, i));
+				break;
+			case FREEQ_COL_NUMBER:
+				fprintf(stderr, "reading element from coll %d %x\n", j, t->columns[j].data.intcol);
+				fprintf(f, "%d", iValArrayInt.GetElement(t->columns[j].data.intcol, i));
+				break;
+			default:
+				break;
+			}
+			fprintf(f, j < (t->numcols - 1) ? "," : "\n");
+		}
+	}			
 }
 
+bool ragged(int c, int rlens[], int *min) {
+	*min = rlens[0];
+	fprintf(stderr, "min set to %d\n", *min);
+	bool ragged = false;
+	
+	for (int i = 0; i < c; i++) {
+		fprintf(stderr, "len of col %d is %d\n", i, rlens[i]);
+		if (rlens[i] < *min) {
+			fprintf(stderr, "adjusted min to %d\n", rlens[i]);
+			*min = rlens[i];
+			ragged = true;
+		}
+	}
+	return ragged;	
+}
 
 FREEQ_EXPORT int freeq_table_new(struct freeq_ctx *ctx,
 				 const char *name,
 				 int numcols,
-				 freeq_coltype_t **coltypes,
-				 char **colnames,
+				 freeq_coltype_t coltypes[],
+				 const char *colnames[],
 				 struct freeq_table **table,
 				 ...)
-{
-	
+{	
 	va_list argp;
+	int collens[numcols];
 	struct freeq_table *t;
-
-	t = malloc(sizeof(struct freeq_table) + sizeof(union freeq_column) * numcols);
-	if (!t)
+	t = (struct freeq_table *)malloc(sizeof(struct freeq_table) + sizeof(struct freeq_column) * numcols);
+	
+	if (!t) {
+		err(ctx, "unable to allocate memory for table\n");
 		return -ENOMEM;
-
+	}
 	t->name = name;
-	t->numcols = 0;
-	//t->numrows = 0;
+	t->numcols = numcols;
 	t->refcount = 1;
 	t->ctx = ctx;
-		
+
+	dbg(ctx, "going to allocate columns...\n");
 	va_start(argp, table);
 	for (int i = 0; i < t->numcols; i++) 
 	{
-		t->columns[i]->name = strdup(colnames[i]);
-		t->columns[i]->coltype = *(*(coltypes + i));
-		switch (t->columns[i]->coltype)
+		dbg(ctx, "freeq_table_new: adding column %d\n", i);
+		t->columns[i].name = strdup(colnames[i]);
+		t->columns[i].coltype = coltypes[i];
+		switch (t->columns[i].coltype)
 		{
 		case FREEQ_COL_STRING:
-			t->columns[i]->strcol = va_arg(argp, strCollection*);
+			t->columns[i].data.strcol = va_arg(argp, strCollection*);
+			dbg(ctx, "freeq_table_new: adding str column %x\n", t->columns[i].data.strcol);
+			collens[i] = istrCollection.Size(t->columns[i].data.strcol);
 			break;
 		case FREEQ_COL_NUMBER:
-			t->columns[i]->intcol = va_arg(argp, ValArrayInt*);
+			t->columns[i].data.intcol = va_arg(argp, ValArrayInt*);
+			dbg(ctx, "freeq_table_new: adding int column %x\n", t->columns[i].data.intcol);
+			collens[i] = iValArrayInt.Size(t->columns[i].data.intcol);
 			break;
 		default:
 			break;
 		}
+
 	}
+	va_end(argp);
+	if (ragged(numcols, (int *)&collens, &(t->numrows)))
+		dbg(ctx, "freeq_table_new: ragged table detected, using min col length %d\n", t->numrows);
 
 	*table = t;
 	return 0;
@@ -503,30 +554,34 @@ FREEQ_EXPORT int freeq_table_new(struct freeq_ctx *ctx,
 //	return NULL;
 //}
 
+/* FREEQ_EXPORT int freeq_table_send(struct freeq_ctx *ctx, struct freeq_table *table) */
+/* { */
+/* 	msgpack_sbuffer sbuf; */
+/* 	int res; */
+/* 	msgpack_sbuffer_init(&sbuf); */
+/* 	table->identity = ctx->identity; */
+/* 	//res = freeq_table_pack_msgpack(&sbuf, ctx, table); */
+
+/* 	dbg(ctx, "freeq_table_send: table pack returned %d\n", res); */
+
+/* 	if (res == 0)  */
+/* 	{ */
+/* 		const char *url = "ipc:///tmp/freeqd.ipc"; */
+/* 		int sock = nn_socket(AF_SP, NN_PUSH); */
+/* 		assert(sock >= 0); */
+/* 		assert(nn_connect(sock, url) >= 0); */
+/* 		dbg(ctx, "sending %d bytes to %s\n", sbuf.size, url); */
+/* 		int bytes = nn_send(sock, sbuf.data, sbuf.size, 0); */
+/* 		dbg(ctx, "sent \"%d\" bytes\n", bytes); */
+/* 		assert(bytes == sbuf.size); */
+/* 		nn_shutdown(sock, 0); */
+/* 	} */
+
+/* 	msgpack_sbuffer_destroy(&sbuf); */
+/* } */
 FREEQ_EXPORT int freeq_table_send(struct freeq_ctx *ctx, struct freeq_table *table)
-{
-	msgpack_sbuffer sbuf;
-	int res;
-	msgpack_sbuffer_init(&sbuf);
-	table->identity = ctx->identity;
-	//res = freeq_table_pack_msgpack(&sbuf, ctx, table);
+{      
 
-	dbg(ctx, "freeq_table_send: table pack returned %d\n", res);
-
-	if (res == 0) 
-	{
-		const char *url = "ipc:///tmp/freeqd.ipc";
-		int sock = nn_socket(AF_SP, NN_PUSH);
-		assert(sock >= 0);
-		assert(nn_connect(sock, url) >= 0);
-		dbg(ctx, "sending %d bytes to %s\n", sbuf.size, url);
-		int bytes = nn_send(sock, sbuf.data, sbuf.size, 0);
-		dbg(ctx, "sent \"%d\" bytes\n", bytes);
-		assert(bytes == sbuf.size);
-		nn_shutdown(sock, 0);
-	}
-
-	msgpack_sbuffer_destroy(&sbuf);
 }
 
 FREEQ_EXPORT int freeq_table_write_sock(struct freeq_ctx *ctx, struct freeq_table *table, int sock)
@@ -561,25 +616,25 @@ struct freeq_table *t;
 int sock;
 {	
 	int i = 0;
-	//write(sock, &(t->numrows), sizeof(int));
+	int c = t->numcols;
 	write(sock, &(t->identity), strlen(t->identity) + 1);
+	return 1;
 	write(sock, &(t->name), strlen(t->name) + 1);
-	write(sock, &(t->numcols), sizeof(int));
+	write(sock, &c, sizeof(int));
 
-	for (i=0; i < t->numcols; i++) 
-		write(sock, &(t->columns[i]->coltype), sizeof(freeq_coltype_t));
+	for (i=0; i < c; i++) 
+		write(sock, &(t->columns[i].coltype), sizeof(freeq_coltype_t));
 	
-	for (i=0; i < t->numcols; i++)
-		write(sock, &(t->columns[i]->name), strlen(t->columns[i]->name) + 1);
+	for (i=0; i < c; i++)
+		write(sock, &(t->columns[i].name), strlen(t->columns[i].name) + 1);
 	
-	for (int i=0; i < t->numcols; i++) 
+	for (i=0; i < c; i++) 
 	{
-		switch (t->columns[i]->coltype)
+		switch (t->columns[i].coltype)
 		{
 		case FREEQ_COL_STRING:			
 			break;
 		case FREEQ_COL_NUMBER:
-			// msgpack_pack_int(&pk, ((int *)seg->data)[i]);
 			break;
 		case FREEQ_COL_IPV4ADDR:
 			break;

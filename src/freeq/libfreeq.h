@@ -66,11 +66,13 @@ typedef enum
 	FREEQ_COL_IPV6ADDR,
 } freeq_coltype_t;
 	
-union freeq_column {
+struct freeq_column {
 	freeq_coltype_t coltype;
 	char *name;
-	strCollection *strcol;
-	ValArrayInt *intcol;
+	union {
+		strCollection *strcol;
+		ValArrayInt *intcol;
+	} data;
 };
 
 struct freeq_table {	
@@ -81,7 +83,7 @@ struct freeq_table {
 	const char *identity;	
 	int numcols;
 	struct freeq_table *next;
-	union freeq_column *columns[];
+	struct freeq_column columns[];
 };
 
 void freeq_table_print(struct freeq_ctx *ctx,
@@ -124,15 +126,16 @@ struct freeq_table *freeq_table_unref(struct freeq_table *table);
 struct freeq_ctx *freeq_table_get_ctx(struct freeq_table *table);
 
 int freeq_table_send(struct freeq_ctx *c, struct freeq_table *table);
+int freeq_table_write(struct freeq_ctx *c, struct freeq_table *table, int sock);
 int freeq_table_write_sock(struct freeq_ctx *c, struct freeq_table *table, int sock);
 int freeq_error_write_sock(struct freeq_ctx *ctx, const char *errmsg, int sock);
 int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ctx *ctx, struct freeq_table *table);
 
 int freeq_table_new(struct freeq_ctx *ctx,
-		    const char *string,
+		    const char *name,
 		    int numcols,
-		    freeq_coltype_t **coltypes,
-		    char **colnames,
+		    freeq_coltype_t coltypes[],
+		    const char *colnames[],
 		    struct freeq_table **table, ...);
 
 int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *buf, size_t bufsize, struct freeq_table **table);
