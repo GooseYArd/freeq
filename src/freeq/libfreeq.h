@@ -27,7 +27,9 @@
 extern "C" {
 #endif
 #include "msgpack.h"
-#include "containers.h"
+/*#include "containers.h"*/
+#include <glib.h>
+
 /*
  * freeq_ctx
  *
@@ -69,10 +71,7 @@ typedef enum
 struct freeq_column {
 	freeq_coltype_t coltype;
 	char *name;
-	union {
-		strCollection *strcol;
-		ValArrayInt *intcol;
-	} data;
+	GSList *data;
 };
 
 struct freeq_table {	
@@ -80,7 +79,6 @@ struct freeq_table {
 	int refcount;
 	int numrows;
 	const char *name;
-	const char *identity;	
 	int numcols;
 	struct freeq_table *next;
 	struct freeq_column columns[];
