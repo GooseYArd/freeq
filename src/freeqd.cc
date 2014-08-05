@@ -489,8 +489,8 @@ void *receiver (void *arg)
 			struct freeq_table *tail = NULL;
 			while (tmp != NULL)
 			{
-				if (tmp->identity == table->identity)
-					break;
+				//if (tmp->identity == table->identity)
+				//	break;
 				tail = tmp;
 				tmp = tmp->next;
 			}
@@ -498,12 +498,12 @@ void *receiver (void *arg)
 			/* we don't have a table from this provider */
 			if (tmp == NULL)
 			{
-				dbg(ctx, "receiver: appending table for %s/%s\n", table->name, table->identity);
+				//dbg(ctx, "receiver: appending table for %s/%s\n", table->name, table->identity);
 				tail->next = table;
 			}
 			else
 			{
-				dbg(ctx, "generation already contains %s/%s\n", table->name, table->identity);
+				//dbg(ctx, "generation already contains %s/%s\n", table->name, table->identity);
 			}
 		}
 

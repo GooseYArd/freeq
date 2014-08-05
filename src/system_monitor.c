@@ -73,65 +73,54 @@ void freeproctab(proc_t ** tab)
   free(tab);
 }
 
-static void PrintStringCollection(strCollection *AL)
-{
-        size_t i;
-        printf("Count %ld, Capacity %ld\n",
-               (long)istrCollection.Size(AL),
-               (long)istrCollection.GetCapacity(AL));
-        for (i=0; i<istrCollection.Size(AL);i++) {
-                printf("%s ",istrCollection.GetElement(AL,i));
-        }
-        printf("\n");
-}
-
-
 void procnothread(const char *machineip)
 {
         struct freeq_ctx *ctx;
         struct freeq_table *tbl;
         proc_t proc_info;
         int err;
+        
+        fprintf(stderr, "machine ip is %s\n", machineip);
 
-        err = freeq_new(&ctx, "system_monitor", NULL);
+        err = freeq_new(&ctx, "system_monitor", machineip);
         if (err < 0)
                 exit(EXIT_FAILURE);
 
         freeq_set_identity(ctx, machineip);
 
-        strCollection *machineips = istrCollection.Create(2);
-        strCollection *cmds = istrCollection.Create(2);
-        ValArrayInt *pids = iValArrayInt.Create(100);
-        ValArrayInt *pcpu = iValArrayInt.Create(100);
-        ValArrayInt *state = iValArrayInt.Create(100);
-        ValArrayInt *priority = iValArrayInt.Create(100);
-        ValArrayInt *rss = iValArrayInt.Create(100);
-        ValArrayInt *vsize = iValArrayInt.Create(100);
-        ValArrayInt *euid = iValArrayInt.Create(100);
-        ValArrayInt *egid = iValArrayInt.Create(100);
-        ValArrayInt *ruid = iValArrayInt.Create(100);
-        ValArrayInt *rgid = iValArrayInt.Create(100);
-        
+        GSList *machineips = NULL, 
+                *cmds = NULL, 
+                *pids = NULL, 
+                *pcpu = NULL, 
+                *state = NULL, 
+                *priority = NULL,
+                *nice = NULL,
+                *rss = NULL, 
+                *vsize = NULL, 
+                *euid = NULL, 
+                *egid = NULL, 
+                *ruid = NULL, 
+                *rgid = NULL;        
         PROCTAB* proc = openproc(PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLSTATUS);
 
         memset(&proc_info, 0, sizeof(proc_info));
+        
 
         while (readproc(proc, &proc_info) != NULL) {
-                istrCollection.Add(machineips, "1.2.3.4");
-                istrCollection.Add(cmds, proc_info.cmd);
-                iValArrayInt.Add(pids, proc_info.ppid);
-                iValArrayInt.Add(pcpu, proc_info.pcpu);
-                iValArrayInt.Add(state, proc_info.state);
-                iValArrayInt.Add(priority, proc_info.priority);
-                iValArrayInt.Add(rss, proc_info.rss);
-                iValArrayInt.Add(vsize, proc_info.vsize);
-                iValArrayInt.Add(euid, proc_info.euid);
-                iValArrayInt.Add(egid, proc_info.egid);
-                iValArrayInt.Add(ruid, proc_info.ruid);
-                iValArrayInt.Add(rgid, proc_info.rgid);
+                cmds = g_slist_append(cmds, proc_info.cmd);
+                pids = g_slist_append(pids, GINT_TO_POINTER(proc_info.ppid));
+                pcpu = g_slist_append(pcpu, GINT_TO_POINTER(proc_info.pcpu));
+                state = g_slist_append(state, GINT_TO_POINTER(proc_info.state));
+                priority = g_slist_append(priority, GINT_TO_POINTER(proc_info.priority));
+                nice = g_slist_append(nice, GINT_TO_POINTER(proc_info.nice));
+                rss = g_slist_append(rss, GINT_TO_POINTER(proc_info.rss));
+                vsize = g_slist_append(vsize, GINT_TO_POINTER(proc_info.vsize));
+                euid = g_slist_append(euid, GINT_TO_POINTER(proc_info.euid));
+                egid = g_slist_append(egid, GINT_TO_POINTER(proc_info.egid));
+                ruid = g_slist_append(ruid, GINT_TO_POINTER(proc_info.ruid));
+                rgid = g_slist_append(rgid, GINT_TO_POINTER(proc_info.rgid));
+                machineips = g_slist_append(machineips, "1.2.3.4");
         }
-
-        PrintStringCollection(cmds);
 
         err = freeq_table_new(ctx, 
                               "procnothread", 

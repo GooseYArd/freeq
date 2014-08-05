@@ -28,3 +28,7 @@ tests/check_basic
 tests/check_basic.log
 tests/check_basic.trs
 tests/test-suite.log
+freeqd
+freeql
+stest
+system_monitor

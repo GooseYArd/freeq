@@ -45,6 +45,7 @@ AM_CFLAGS = ${my_CFLAGS} \
 	-fPIC
 
 AM_LDFLAGS = \
+	-L/usr/lib/x86_64-linux-gnu \
 	-Wl,--gc-sections \
 	-Wl,--as-needed
 
@@ -147,12 +148,12 @@ libcontrol_a_SOURCES = \
 	control/substdo.c
 
 
-libfreeq_1_0_la_LIBADD = $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(PROCPS_LIBS) libccl.a
+libfreeq_1_0_la_LIBADD = $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(PROCPS_LIBS) -lglib-2.0
 
 stest_SOURCES = src/stest.c src/system.h
 freeqd_SOURCES = src/freeqd.cc src/system.h
 freeql_SOURCES = src/freeql.cc src/system.h
-system_monitor_SOURCES = src/system_monitor.cc src/system.h
+system_monitor_SOURCES = src/system_monitor.c src/system.h
 
 system_monitor_LDADD = \
 	$(LIBINTL) \
@@ -161,7 +162,8 @@ system_monitor_LDADD = \
 	libccl.a \
 	$(NANOMSG_LDFLAGS) \
 	$(MSGPACK_LIBS) \
-	$(PROCPS_LIBS)
+	$(PROCPS_LIBS) \
+	-lglib-2.0
 
 freeqd_LDADD = \
 	$(LIBINTL) \
@@ -174,7 +176,7 @@ freeqd_LDADD = \
 
 freeql_LDADD = $(LIBINTL) $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la 
 
-stest_LDADD = $(LIBINTL) libcontrol.a $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la $(CCL_LIBS) libccl.a
+stest_LDADD = $(LIBINTL) libcontrol.a $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la $(CCL_LIBS) -lglib-2.0
 
 TESTS = check_basic check_msgpack
 
