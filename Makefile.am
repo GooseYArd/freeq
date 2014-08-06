@@ -30,7 +30,6 @@ AM_CPPFLAGS = \
 	-I${top_srcdir}/gnulib/lib \
 	-I${top_srcdir}/src/freeq \
 	-I${top_srcdir}/src \
-	-I${top_srcdir}/ccl \
 	-I/usr/include/glib-2.0 \
 	-I/usr/lib/x86_64-linux-gnu/glib-2.0/include \
 	$(SQLITE4_CFLAGS) \
@@ -67,57 +66,7 @@ lib_LTLIBRARIES = \
 
 libfreeq_1_0_la_SOURCES = src/libfreeq.c
 
-noinst_LIBRARIES = libcontrol.a libccl.a
-
-libccl_a_SOURCES = \
-	ccl/vector.c \
-	ccl/bloom.c \
-	ccl/error.c \
-	ccl/dlist.c \
-	ccl/qsortex.c \
-	ccl/heap.c \
-	ccl/deque.c \
-	ccl/hashtable.c \
-	ccl/malloc_debug.c \
-	ccl/containers.h \
-	ccl/ccl_internal.h \
-	ccl/stdint.h \
-	ccl/pool.c \
-	ccl/pooldebug.c \
-	ccl/redblacktree.c \
-	ccl/scapegoat.c \
-	ccl/smallpool.c \
-	ccl/ccl_internal.h \
-	ccl/bitstrings.c \
-	ccl/list.c \
-	ccl/memorymanager.c \
-	ccl/strcollection.c \
-	ccl/searchtree.c \
-	ccl/containers.h \
-	ccl/fgetline.c \
-	ccl/generic.c \
-	ccl/queue.c \
-	ccl/buffer.c \
-	ccl/observer.c \
-	ccl/valarraydouble.c \
-	ccl/vectorsize_t.c \
-	ccl/valarrayint.c \
-	ccl/valarraylongdouble.c \
-	ccl/valarrayshort.c \
-	ccl/valarrayfloat.c \
-	ccl/valarrayuint.c \
-	ccl/valarraylonglong.c \
-	ccl/valarrayulonglong.c \
-	ccl/sequential.c \
-	ccl/iMask.c \
-	ccl/wstrcollection.c \
-	ccl/stringlistgen.h \
-	ccl/stringlist.c \
-	ccl/stringlist.h \
-	ccl/wstringlist.h \
-	ccl/priorityqueue.c \
-	ccl/intlist.c \
-	ccl/SuffixTree.c 
+noinst_LIBRARIES = libcontrol.a 
 
 libcontrol_a_SOURCES = \
 	control/qsutil.c \
@@ -159,7 +108,6 @@ system_monitor_LDADD = \
 	$(LIBINTL) \
 	$(top_builddir)/lib/libfreeq.la \
 	libfreeq-1.0.la \
-	libccl.a \
 	$(NANOMSG_LDFLAGS) \
 	$(MSGPACK_LIBS) \
 	$(PROCPS_LIBS) \
@@ -176,7 +124,7 @@ freeqd_LDADD = \
 
 freeql_LDADD = $(LIBINTL) $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la 
 
-stest_LDADD = $(LIBINTL) libcontrol.a $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la $(CCL_LIBS) -lglib-2.0
+stest_LDADD = $(LIBINTL) libcontrol.a $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la -lglib-2.0
 
 TESTS = check_basic check_msgpack
 
