@@ -29,6 +29,7 @@
 #include <ctype.h>
 #include <assert.h>
 #include <stdbool.h>
+#include <math.h>
 
 #include <freeq/libfreeq.h>
 #include "libfreeq-private.h"
@@ -597,6 +598,16 @@ void free_data(gpointer d)
 	g_free(d);
 }
 
+int bsz(int num) {
+	int n = 0;
+	if (num > 0) {
+		while (num != 0) {
+			num >>= 8;
+			n++;
+		}
+	}
+	return n;
+}
 
 FREEQ_EXPORT int freeq_table_write(ctx, t, sock)
 struct freeq_ctx *ctx;
@@ -605,8 +616,12 @@ int sock;
 {
 	int i = 0;
 	int c = t->numcols;
+	int v, dv;
 	gchar *val;
+	int bytes = 0, dbytes = 0;
+	// use a union here
 	GHashTable *strtbls[t->numcols];
+	int prev[t->numcols];
 
 	write(sock, &(ctx->identity), strlen(ctx->identity) + 1);
 	write(sock, &(t->name), strlen(t->name) + 1);
@@ -638,29 +653,43 @@ int sock;
 				if (len > 0)
 				{
 					gpointer *elem = g_hash_table_lookup(strtbls[j], val);
-					if (elem == NULL) 
+					if (elem == NULL)
 					{
 						g_hash_table_insert(strtbls[j], val, GINT_TO_POINTER(i));
 						write(sock, &len, sizeof(int32_t));
-						write(sock, val, len);						
+						bytes += len;
+						dbytes += len;
+						write(sock, val, len);
 					}
-					else					       
+					else
 					{
+						bytes += len;							
 						len = -GPOINTER_TO_INT(elem);
+						fprintf(stderr, "we already saw %s so we're sending %d\n", val, len);
+						dbytes += 4;
 						write(sock, &len, sizeof(int32_t));
 					}
-
 				}
 				else
 				{
-
+					fprintf(stderr, "empty string, sending a null\n", val, len);
+					write(sock, 0, 1);
 				}
-
-				//char *e = istrCollection.GetElement(t->columns[j].data.strcol, i);
-				//iHashTable.GetElement
-				//int idx =
 				break;
 			case FREEQ_COL_NUMBER:
+				v = GPOINTER_TO_INT(g_slist_nth_data(t->columns[j].data, i));
+				dv = abs(v - prev[j]);
+
+				bytes += bsz(v);
+				if (bsz(dv) > bsz(v)) {
+					fprintf(stderr, "delta %d is larger than value %d, sending value\n", dv, v);
+					dbytes += bsz(v);
+				} else {
+					fprintf(stderr, "delta is smaller than value, sending delta\n");
+					dbytes += bsz(dv);
+				}
+
+				prev[j] = v;
 				break;
 			case FREEQ_COL_IPV4ADDR:
 				break;
@@ -673,6 +702,7 @@ int sock;
 		}
 	}
 
+	fprintf(stderr, "raw %d compressed %d bytes\n", bytes, dbytes);
 	return 0;
 }
 
