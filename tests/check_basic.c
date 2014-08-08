@@ -4,7 +4,7 @@
 
 const char *identity = "identity";
 const char *appname = "appname";
-char *colnames[] = { "one", "two" };
+const char *colnames[] = { "one", "two" };
 freeq_coltype_t coltypes[] = { 1, 2 };
 
 int data_one[] = {10, 20, 30};
@@ -82,7 +82,14 @@ START_TEST (test_freeq_table_new_retcode)
 	int v;
 
 	freeq_new(&ctx, appname, identity);
-	v = freeq_table_new(ctx, "foo", (freeq_coltype_t **)&coltypes, colnames, &t, data_one, data_two);
+	v = freeq_table_new(ctx, 
+			    "foo",
+			    2,
+			    (freeq_coltype_t *)&coltypes, 
+			    (const char **)&colnames,
+			    &t, 
+			    data_one, 
+			    data_two);
 	ck_assert_int_eq(v, 0);
 	freeq_table_unref(t);
 	freeq_unref(ctx);
@@ -95,10 +102,13 @@ START_TEST (test_freeq_table_new_ptr)
 	struct freeq_table *t;
 	freeq_new(&ctx, appname, identity);
 	freeq_table_new(ctx, 
-			"foo", 
-			(freeq_coltype_t **)&coltypes, 
-			colnames, 
-			&t);
+			"foo",
+			2,
+			(freeq_coltype_t *)&coltypes, 
+			(const char **)&colnames, 
+			&t,
+			NULL
+		);
 	ck_assert_ptr_ne(t, NULL);
 	ck_assert_ptr_ne(freeq_get_identity(ctx), NULL);
 	t = freeq_table_unref(t);

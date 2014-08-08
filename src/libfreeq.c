@@ -33,8 +33,6 @@
 
 #include <freeq/libfreeq.h>
 #include "libfreeq-private.h"
-#include "msgpack.h"
-#include "containers.h"
 
 #include <nanomsg/nn.h>
 #include <nanomsg/pipeline.h>
@@ -62,7 +60,6 @@ struct freeq_ctx {
 	const char* url;
 	const char* appname;
 	int log_priority;
-	strCollection *errcol;
 };
 
 FREEQ_EXPORT void freeq_log(struct freeq_ctx *ctx,

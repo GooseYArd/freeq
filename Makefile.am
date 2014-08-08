@@ -96,8 +96,7 @@ libcontrol_a_SOURCES = \
 	control/substdi.c \
 	control/substdo.c
 
-
-libfreeq_1_0_la_LIBADD = $(NANOMSG_LDFLAGS) $(MSGPACK_LIBS) $(PROCPS_LIBS) -lglib-2.0
+libfreeq_1_0_la_LIBADD = $(NANOMSG_LDFLAGS) $(GLIB_LIBS)
 
 stest_SOURCES = src/stest.c src/system.h
 freeqd_SOURCES = src/freeqd.cc src/system.h
@@ -109,9 +108,8 @@ system_monitor_LDADD = \
 	$(top_builddir)/lib/libfreeq.la \
 	libfreeq-1.0.la \
 	$(NANOMSG_LDFLAGS) \
-	$(MSGPACK_LIBS) \
-	$(PROCPS_LIBS) \
-	-lglib-2.0
+	$(GLIB_LIBS) \
+	$(PROCPS_LIBS)
 
 freeqd_LDADD = \
 	$(LIBINTL) \
@@ -119,23 +117,23 @@ freeqd_LDADD = \
 	libcontrol.a \
 	libfreeq-1.0.la \
 	$(NANOMSG_LDFLAGS) \
-	$(MSGPACK_LIBS) \
+	$(GLIB_LIBS) \
 	$(SQLITE4_LDFLAGS)
 
-freeql_LDADD = $(LIBINTL) $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la 
+freeql_LDADD = $(LIBINTL) $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la  $(GLIB_LIBS)
 
-stest_LDADD = $(LIBINTL) libcontrol.a $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la -lglib-2.0
+stest_LDADD = $(LIBINTL) libcontrol.a $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la $(GLIB_LIBS)
 
 TESTS = check_basic check_msgpack
 
 check_PROGRAMS = check_basic check_msgpack
 check_basic_SOURCES = tests/check_basic.c $(top_builddir)/src/freeq/freeq.h
 check_basic_CFLAGS = @CHECK_CFLAGS@
-check_basic_LDADD = libfreeq-1.0.la @CHECK_LIBS@
+check_basic_LDADD = libfreeq-1.0.la @CHECK_LIBS@ @GLIB_LIBS@
 
 check_msgpack_SOURCES = tests/check_msgpack.c $(top_builddir)/src/freeq/freeq.h
 check_msgpack_CFLAGS = @CHECK_CFLAGS@
-check_msgpack_LDADD = libfreeq-1.0.la @CHECK_LIBS@
+check_msgpack_LDADD = libfreeq-1.0.la @CHECK_LIBS@  @GLIB_LIBS@
 
 LOG_COMPILER = $(SHELL)
 

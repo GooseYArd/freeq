@@ -16,8 +16,6 @@
 #include "freeq/libfreeq.h"
 #include <proc/readproc.h>
 
-#include "ccl/containers.h"
-
 #define NODE0 "node0"
 #define NODE1 "node1"
 

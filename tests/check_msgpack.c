@@ -24,7 +24,13 @@ START_TEST (test_freeq_col_pack_unpack)
 	//msgpack_sbuffer sbuf;
 	
 	freeq_new(&ctx, appname, identity);
-	freeq_table_new(ctx, "foo", (freeq_coltype_t **)&coltypes, colnames, &t, (void **)&data);
+	freeq_table_new(ctx, 
+			"foo", 
+			2,
+			(freeq_coltype_t *)&coltypes, 
+			(const char **)&colnames, 
+			&t, 
+			&data);
 	
 	//freeq_table_column_new(ctx, t, "bar", FREEQ_COL_NUMBER, &data, 10);
 	//ck_assert_ptr_eq(t->columns->segments->data, &data);

@@ -60,7 +60,7 @@ AC_CHECK_HEADERS([nanomsg/nn.h nanomsg/survey.h],
 AS_IF([test "x$found_nanomsg_headers" != "xyes"],
 	    [AC_MSG_ERROR([Unable to find the standard nanomsg headers])])
 
-PKG_CHECK_MODULES(MSGPACK, msgpack)
+PKG_CHECK_MODULES(GLIB, glib-2.0)
 PKG_CHECK_MODULES(PROCPS, libprocps)
 
 AX_CXX_COMPILE_STDCXX_11
