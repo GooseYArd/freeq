@@ -1,13 +1,16 @@
 #include <check.h>
 #include "src/freeq/libfreeq.h"
 //#include "src/libfreeq-private.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 const char *identity = "identity";
 const char *appname = "appname";
 
-char *colnames[] = { "one", "two", "three" };
-freeq_coltype_t coltypes[] = { 1, 2, 3 };
-
+const char *colnames[] = { "one", "two" };
+freeq_coltype_t coltypes[] = { FREEQ_COL_NUMBER, FREEQ_COL_STRING };
 
 START_TEST (test_dummy)
 {
@@ -20,8 +23,16 @@ START_TEST (test_freeq_col_pack_unpack)
 {
 	struct freeq_ctx *ctx;
 	struct freeq_table *t = 0, *t2 = 0;
-	int data[10] = {0,1,2,3,4,5,6,7,8,9};	
-	//msgpack_sbuffer sbuf;
+	
+	GSList *data_one = NULL;
+	GSList *data_two = NULL;
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(1));
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(2));
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(1));
+
+	data_two = g_slist_append(data_two, "one");
+	data_two = g_slist_append(data_two, "two");
+	data_two = g_slist_append(data_two, "one");
 	
 	freeq_new(&ctx, appname, identity);
 	freeq_table_new(ctx, 
@@ -30,17 +41,14 @@ START_TEST (test_freeq_col_pack_unpack)
 			(freeq_coltype_t *)&coltypes, 
 			(const char **)&colnames, 
 			&t, 
-			&data);
-	
-	//freeq_table_column_new(ctx, t, "bar", FREEQ_COL_NUMBER, &data, 10);
-	//ck_assert_ptr_eq(t->columns->segments->data, &data);
-	ck_assert_ptr_ne(freeq_get_identity(ctx), NULL);
-	
-	//msgpack_sbuffer_init(&sbuf);
-	//ck_assert_int_eq(freeq_table_pack_msgpack(&sbuf, ctx, t), 0);
-	//ck_assert_int_eq(freeq_table_header_from_msgpack(ctx, sbuf.data, sbuf.size, &t2), 0);
+			data_one,
+			data_two);
 
-	//msgpack_sbuffer_destroy(&sbuf);
+	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;      
+	int fd = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode);
+	freeq_table_write(ctx, t, fd);
+	close(fd);
+
 	freeq_table_unref(t);
 	freeq_table_unref(t2);
 	freeq_unref(ctx);

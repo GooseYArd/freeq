@@ -64,7 +64,9 @@ bin_PROGRAMS = freeqd system_monitor freeql stest
 lib_LTLIBRARIES = \
 	libfreeq-1.0.la
 
-libfreeq_1_0_la_SOURCES = src/libfreeq.c
+libfreeq_1_0_la_SOURCES = \
+	src/libfreeq.c \
+	src/varint.c
 
 noinst_LIBRARIES = libcontrol.a 
 
@@ -127,7 +129,7 @@ stest_LDADD = $(LIBINTL) libcontrol.a $(top_builddir)/lib/libfreeq.la libfreeq-1
 TESTS = check_basic check_msgpack
 
 check_PROGRAMS = check_basic check_msgpack
-check_basic_SOURCES = tests/check_basic.c $(top_builddir)/src/freeq/freeq.h
+check_basic_SOURCES = tests/check_basic.c src/varint.c $(top_builddir)/src/freeq/freeq.h
 check_basic_CFLAGS = @CHECK_CFLAGS@
 check_basic_LDADD = libfreeq-1.0.la @CHECK_LIBS@ @GLIB_LIBS@
 

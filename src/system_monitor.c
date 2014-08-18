@@ -126,7 +126,7 @@ void procnothread(const char *machineip)
                               (freeq_coltype_t *)&coltypes, 
                               (const char **)&colnames, 
                               &tbl,
-                              (char *)machineips,
+                              machineips,
                               pids,
                               cmds,
                               pcpu,

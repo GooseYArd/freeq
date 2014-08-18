@@ -60,6 +60,16 @@ AC_CHECK_HEADERS([nanomsg/nn.h nanomsg/survey.h],
 AS_IF([test "x$found_nanomsg_headers" != "xyes"],
 	    [AC_MSG_ERROR([Unable to find the standard nanomsg headers])])
 
+AC_SEARCH_LIBS([buffer_init], [owfat], [], [
+  AC_MSG_ERROR([unable to find the buffer_init() function])
+])
+
+AC_CHECK_HEADERS([buffer.h],
+			   [found_libowfat_headers=yes; break;])
+
+AS_IF([test "x$found_libowfat_headers" != "xyes"],
+	    [AC_MSG_ERROR([Unable to find the standard libowfat headers])])
+
 PKG_CHECK_MODULES(GLIB, glib-2.0)
 PKG_CHECK_MODULES(PROCPS, libprocps)
 

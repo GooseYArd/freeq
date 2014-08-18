@@ -20,6 +20,7 @@
 
 #include "config.h"
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdarg.h>
@@ -36,6 +37,9 @@
 
 #include <nanomsg/nn.h>
 #include <nanomsg/pipeline.h>
+
+#include "varint.h"
+#include "buffer.h"
 
 /**
  * SECTION:libfreeq
@@ -407,15 +411,25 @@ FREEQ_EXPORT int freeq_table_new(struct freeq_ctx *ctx,
 
 	dbg(ctx, "going to allocate columns...\n");
 	va_start(argp, table);
+
 	for (int i = 0; i < t->numcols; i++)
 	{
+		GSList *d = va_arg(argp, GSList *);
+		if (d == NULL) {
+			freeq_table_unref(t);
+			err(ctx, "invalid column\n");
+			*table = NULL;
+			return -1;
+		}
 		dbg(ctx, "freeq_table_new: adding column %d\n", i);
 		t->columns[i].name = strdup(colnames[i]);
 		t->columns[i].coltype = coltypes[i];
-		t->columns[i].data = va_arg(argp, GSList *);
+		t->columns[i].data = d;
 		collens[i] = g_slist_length(t->columns[i].data);
 	}
+
 	va_end(argp);
+
 	if (ragged(numcols, (int *)&collens, &(t->numrows)))
 		dbg(ctx, "freeq_table_new: ragged table detected, using min col length %d\n", t->numrows);
 
@@ -423,143 +437,6 @@ FREEQ_EXPORT int freeq_table_new(struct freeq_ctx *ctx,
 	return 0;
 }
 
-/* FREEQ_EXPORT int freeq_table_column_new(struct freeq_ctx *ctx, */
-/*					struct freeq_table *table, */
-/*					const char *name, */
-/*					freeq_coltype_t coltype, */
-/*					void *data, */
-/*					size_t len) */
-/* { */
-/*	struct freeq_column *c; */
-/*	//struct freeq_column_segment *seg; */
-/*	c = calloc(1, sizeof(struct freeq_column)); */
-/*	if (!c) */
-/*		return -ENOMEM; */
-
-/*	//seg = calloc(1, sizeof(struct freeq_column_segment)); */
-/*	//if (!seg)  */
-/*	//{ */
-/*	//	free(c); */
-/*	//	return -ENOMEM; */
-/*	//} */
-
-/*	c->name = name; */
-/*	c->refcount = 1; */
-
-/*	//seg->len = len; */
-/*	//seg->data = data; */
-/*	//seg->refcount = 1; */
-/*	//seg->next = NULL; */
-
-/*	//c->segments = seg; */
-/*	c->coltype = coltype; */
-
-/*	table->numcols++; */
-/*	table->numrows = len; */
-
-/*	struct freeq_column *lastcol = table->columns; */
-
-/*	if (lastcol == NULL) */
-/*		table->columns = c; */
-/*	else */
-/*	{ */
-/*		while (lastcol->next != NULL) */
-/*			lastcol = lastcol->next; */
-/*		lastcol->next = c; */
-/*	} */
-/*	return 0; */
-/* } */
-
-/* FREEQ_EXPORT int freeq_table_column_new_empty(struct freeq_ctx *ctx, */
-/*					      struct freeq_table *table, */
-/*					      const char *name, */
-/*					      freeq_coltype_t coltype, */
-/*					      struct freeq_column **colp, */
-/*					      size_t len) */
-/* { */
-/*	struct freeq_column *c; */
-/*	struct freeq_column_segment *seg; */
-/*	c = calloc(1, sizeof(struct freeq_column)); */
-/*	if (!c) */
-/*		return -ENOMEM; */
-
-/*	seg = calloc(1, sizeof(struct freeq_column_segment)); */
-/*	if (!seg)  */
-/*	{ */
-/*		free(c); */
-/*		return -ENOMEM; */
-/*	} */
-
-/*	c->name = name; */
-/*	c->refcount = 1; */
-/*	seg->len = len; */
-
-/*	switch (coltype)  */
-/*	{ */
-/*	case FREEQ_COL_STRING: */
-/*		seg->data = calloc(sizeof(char*), len); */
-/*		break; */
-/*	case FREEQ_COL_NUMBER: */
-/*		seg->data = calloc(sizeof(int), len); */
-/*		break; */
-/*	default: */
-/*		break; */
-/*	} */
-
-/*	seg->refcount = 1; */
-/*	seg->next = NULL; */
-
-/*	c->segments = seg; */
-/*	c->coltype = coltype; */
-
-/*	table->numcols++; */
-/*	table->numrows = len; */
-
-/*	struct freeq_column *lastcol = table->columns; */
-
-/*	if (lastcol == NULL) */
-/*		table->columns = c; */
-/*	else */
-/*	{ */
-/*		while (lastcol->next != NULL) */
-/*			lastcol = lastcol->next; */
-/*		lastcol->next = c; */
-/*	} */
-/*	*colp = c; */
-/*	return 0; */
-/* } */
-
-
-//FREEQ_EXPORT struct freeq_column *freeq_table_get_some_column(struct freeq_table *table)
-//{
-//	return NULL;
-//}
-
-/* FREEQ_EXPORT int freeq_table_send(struct freeq_ctx *ctx, struct freeq_table *table) */
-/* { */
-/*	msgpack_sbuffer sbuf; */
-/*	int res; */
-/*	msgpack_sbuffer_init(&sbuf); */
-/*	table->identity = ctx->identity; */
-/*	//res = freeq_table_pack_msgpack(&sbuf, ctx, table); */
-
-/*	dbg(ctx, "freeq_table_send: table pack returned %d\n", res); */
-
-/*	if (res == 0)  */
-/*	{ */
-/*		const char *url = "ipc:///tmp/freeqd.ipc"; */
-/*		int sock = nn_socket(AF_SP, NN_PUSH); */
-/*		assert(sock >= 0); */
-/*		assert(nn_connect(sock, url) >= 0); */
-/*		dbg(ctx, "sending %d bytes to %s\n", sbuf.size, url); */
-/*		int bytes = nn_send(sock, sbuf.data, sbuf.size, 0); */
-/*		dbg(ctx, "sent \"%d\" bytes\n", bytes); */
-/*		assert(bytes == sbuf.size); */
-/*		nn_shutdown(sock, 0); */
-/*	} */
-
-/*	msgpack_sbuffer_destroy(&sbuf); */
-/* } */
 FREEQ_EXPORT int freeq_table_send(struct freeq_ctx *ctx, struct freeq_table *table)
 {
 
@@ -614,21 +491,39 @@ int sock;
 	int i = 0;
 	int c = t->numcols;
 	int v, dv;
+	int b = 0;
 	gchar *val;
+	uint8_t vibuf[10];
+	unsigned short ilen;
+	unsigned char slen = 0;
 	int bytes = 0, dbytes = 0;
 	// use a union here
 	GHashTable *strtbls[t->numcols];
 	int prev[t->numcols];
 
-	write(sock, &(ctx->identity), strlen(ctx->identity) + 1);
-	write(sock, &(t->name), strlen(t->name) + 1);
-	write(sock, &c, sizeof(int));
+	char buf[4096];
+	buffer output;
+	buffer_init(&output,write,sock,buf,sizeof buf);
+
+	slen = strlen(ctx->identity) + 1;
+	buffer_put(&output, &slen, sizeof(slen));
+	buffer_puts(&output, (const char *)ctx->identity);
+
+	slen = strlen(t->name) + 1;
+	buffer_put(&output, &slen, sizeof(slen));
+	buffer_puts(&output, (const char *)t->name);
+
+	buffer_put(&output, (char *)&c, sizeof(c));
 
 	for (i=0; i < c; i++)
-		write(sock, &(t->columns[i].coltype), sizeof(freeq_coltype_t));
+		buffer_put(&output, (char *)&(t->columns[i].coltype), sizeof(freeq_coltype_t));
 
 	for (i=0; i < c; i++)
-		write(sock, &(t->columns[i].name), strlen(t->columns[i].name) + 1);
+	{
+		slen = strlen(t->columns[i].name) + 1;
+		buffer_put(&output, &slen, sizeof(slen));
+		buffer_puts(&output, (const char *)t->columns[i].name);
+	}
 
 	for (i=0; i < c; i++)
 	{
@@ -640,52 +535,51 @@ int sock;
 	}
 
 	for (i = 0; i < t->numrows; i++) {
+		fprintf(stderr, "row %d\n", i);
 		for (int j = 0; j < c; j++)
 		{
+			fprintf(stderr, "col %d\n", j);
 			switch (t->columns[j].coltype)
 			{
 			case FREEQ_COL_STRING:
 				val = g_slist_nth_data(t->columns[j].data, i);
 				int32_t len = strlen(val);
+				fprintf(stderr, "string %s len %d\n", val, len);
 				if (len > 0)
 				{
-					gpointer *elem = g_hash_table_lookup(strtbls[j], val);
+					gpointer elem = g_hash_table_lookup(strtbls[j], val);
+					fprintf(stderr, "looking for %s (in %p) %p\n", val, strtbls[j], g_hash_table_lookup(strtbls[j], "one"));
 					if (elem == NULL)
 					{
-						g_hash_table_insert(strtbls[j], val, GINT_TO_POINTER(i));
-						write(sock, &len, sizeof(int32_t));
-						bytes += len;
-						dbytes += len;
-						write(sock, val, len);
+						fprintf(stderr, "havent seen string %s, adding it at position %d/%d in %p\n", val, i, j, strtbls[j]);
+						int32_t *idx = malloc(sizeof(int));
+						*idx = i;
+						g_hash_table_insert(strtbls[j], val, idx);
+						fprintf(stderr, "strtbls[%d] size is %d\n",j, g_hash_table_size(strtbls[j]));
+						buffer_put(&output, (const char *)&len, sizeof(len));
+						buffer_puts(&output, val);
 					}
 					else
 					{
-						bytes += len;							
-						len = -GPOINTER_TO_INT(elem);
-						fprintf(stderr, "we already saw %s so we're sending %d\n", val, len);
-						dbytes += 4;
-						write(sock, &len, sizeof(int32_t));
+						int32_t idx = *(int32_t *)elem;
+						ilen = _pbcV_zigzag32(-idx, vibuf);
+						buffer_put(&output, (const char *)&vibuf, ilen);
+						fprintf(stderr, "we already saw %s so we're sending %d\n", val, -idx);
 					}
 				}
 				else
 				{
 					fprintf(stderr, "empty string, sending a null\n", val, len);
-					write(sock, 0, 1);
+					b += write(sock, 0, 1);
 				}
 				break;
+
 			case FREEQ_COL_NUMBER:
 				v = GPOINTER_TO_INT(g_slist_nth_data(t->columns[j].data, i));
 				dv = abs(v - prev[j]);
-
-				bytes += bsz(v);
-				if (bsz(dv) > bsz(v)) {
-					fprintf(stderr, "delta %d is larger than value %d, sending value\n", dv, v);
-					dbytes += bsz(v);
-				} else {
-					fprintf(stderr, "delta is smaller than value, sending delta\n");
-					dbytes += bsz(dv);
-				}
-
+				ilen = _pbcV_encode(dv, vibuf);
+				buffer_put(&output, (const char *)&vibuf, ilen);
+				fprintf(stderr, "added %d bytes\n", ilen);
 				prev[j] = v;
 				break;
 			case FREEQ_COL_IPV4ADDR:
@@ -698,9 +592,10 @@ int sock;
 			}
 		}
 	}
+	buffer_flush(&output);
 
 	fprintf(stderr, "raw %d compressed %d bytes\n", bytes, dbytes);
-	return 0;
+	return b;
 }
 
 /* FREEQ_EXPORT int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ctx *ctx, struct freeq_table *table) */

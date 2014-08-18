@@ -27,7 +27,6 @@
 extern "C" {
 #endif
 #include "msgpack.h"
-/*#include "containers.h"*/
 #include <glib.h>
 
 /*
@@ -41,6 +40,7 @@ struct freeq_table_header;
 struct freeq_ctx *freeq_ref(struct freeq_ctx *ctx);
 struct freeq_ctx *freeq_unref(struct freeq_ctx *ctx);
 struct freeq_table_header *freeq_table_header_unref(struct freeq_ctx *ctx, struct freeq_table_header *header);
+struct freeq_cbuf;
 
 int freeq_new(struct freeq_ctx **ctx, const char *appname, const char *identity);
 void freeq_set_log_fn(struct freeq_ctx *ctx,
@@ -51,6 +51,9 @@ int freeq_get_log_priority(struct freeq_ctx *ctx);
 void freeq_set_log_priority(struct freeq_ctx *ctx, int priority);
 const char *freeq_get_identity(struct freeq_ctx *ctx);
 void freeq_set_identity(struct freeq_ctx *ctx, const char *identity);
+
+uint64_t read_varint64(int sock);
+uint8_t send_varint64(int sock, uint64_t value);
 
 /*
  * freeq_list
@@ -83,6 +86,10 @@ struct freeq_table {
 	struct freeq_table *next;
 	struct freeq_column columns[];
 };
+
+void freeq_cbuf_write(struct freeq_cbuf *b, 
+		      void *d,
+		      ssize_t len);
 
 void freeq_table_print(struct freeq_ctx *ctx,
 		       struct freeq_table *table,
