@@ -49,6 +49,9 @@ START_TEST (test_freeq_col_pack_unpack)
 	freeq_table_write(ctx, t, fd);
 	close(fd);
 
+	fd = open("poop.txt", O_RDONLY, mode);
+	freeq_table_read(ctx, &t2, fd);
+			 
 	freeq_table_unref(t);
 	freeq_table_unref(t2);
 	freeq_unref(ctx);

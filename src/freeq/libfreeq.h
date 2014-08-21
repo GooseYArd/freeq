@@ -130,11 +130,8 @@ struct freeq_table *freeq_table_ref(struct freeq_table *table);
 struct freeq_table *freeq_table_unref(struct freeq_table *table);
 struct freeq_ctx *freeq_table_get_ctx(struct freeq_table *table);
 
-int freeq_table_send(struct freeq_ctx *c, struct freeq_table *table);
 int freeq_table_write(struct freeq_ctx *c, struct freeq_table *table, int sock);
-int freeq_table_write_sock(struct freeq_ctx *c, struct freeq_table *table, int sock);
-int freeq_error_write_sock(struct freeq_ctx *ctx, const char *errmsg, int sock);
-int freeq_table_pack_msgpack(msgpack_sbuffer *sbuf, struct freeq_ctx *ctx, struct freeq_table *table);
+int freeq_table_read(struct freeq_ctx *c, struct freeq_table **table, int sock);
 
 int freeq_table_new(struct freeq_ctx *ctx,
 		    const char *name,
