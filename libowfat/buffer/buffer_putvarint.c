@@ -2,8 +2,12 @@
 #include "buffer.h"
 #include <stdint.h>
 
+/* This code was shamelessly stolen and adapted from beautiful C-only
+   version of protobuf by 云风 (cloudwu) , available at:
+   https://github.com/cloudwu/pbc */
+
 inline int
-buffer_putvarint32(uint32_t number, buffer *b)
+buffer_putvarint32(buffer *b, uint32_t number)
 {
 	if (number < 0x80) {
 		//buffer[0] = (uint8_t) number; 
@@ -38,3 +42,35 @@ buffer_putvarint32(uint32_t number, buffer *b)
 	return 5;
 }
 
+int
+buffer_putvarint(buffer *b, uint64_t number) 
+{
+	if ((number & 0xffffffff) == number) {
+		/* return _pbcV_encode32((uint32_t)number , buffer); */
+		return buffer_putvarint32(b, (uint32_t)number);
+	}
+	int i = 0;
+	do {
+		//buffer[i] = (uint8_t)(number | 0x80);
+                buffer_putbyte(b, (uint8_t)(number | 0x80));
+		number >>= 7;
+		++i;
+	} while (number >= 0x80);
+	//buffer[i] = (uint8_t)number;
+        buffer_putbyte(b, (uint8_t)number);
+	return i+1;
+}
+
+int 
+buffer_putvarintsigned32(buffer *b, int32_t n)
+{
+	n = (n << 1) ^ (n >> 31);
+	return buffer_putvarint32(b,n);
+}
+
+int 
+buffer_putvarintsigned(buffer *b, int64_t n)
+{
+	n = (n << 1) ^ (n >> 63);
+	return buffer_putvarint(b,n);
+}

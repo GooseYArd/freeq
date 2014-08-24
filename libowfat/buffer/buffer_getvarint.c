@@ -39,3 +39,19 @@ ssize_t buffer_getvarint(buffer *b, struct longlong *result) {
 	result->hi = 0;
 	return 10;        
 }
+
+void
+dezigzag64(struct longlong *r)
+{
+	uint32_t low = r->low;
+	r->low = ((low >> 1) | ((r->hi & 1) << 31)) ^ - (low & 1);
+	r->hi = (r->hi >> 1) ^ - (low & 1);
+}
+
+void
+dezigzag32(struct longlong *r)
+{
+	uint32_t low = r->low;
+	r->low = (low >> 1) ^ - (low & 1);
+	r->hi = -(low >> 31);
+}

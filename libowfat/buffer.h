@@ -60,7 +60,12 @@ int buffer_putnlflush(buffer* b); /* put \n and flush */
 
 ssize_t buffer_get(buffer* b,char* x,size_t len);
 ssize_t buffer_getvarint(buffer *b, struct longlong *result);
-int buffer_putvarint32(uint32_t number, buffer *b);
+int buffer_putvarint32(buffer *b, uint32_t number);
+int buffer_putvarint(buffer *b, uint64_t number);
+int buffer_putvarintsigned32(buffer *b, int32_t n);
+int buffer_putvarintsigned(buffer *b, int64_t n);
+void dezigzag64(struct longlong *r);
+void dezigzag32(struct longlong *r);
 int buffer_putbyte(buffer* b, char val);
 
 int buffer_feed(buffer* b);
