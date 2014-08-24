@@ -61,15 +61,23 @@ uint8_t send_varint64(int sock, uint64_t value);
  * access to freeq generated lists
  */
 
-typedef enum
-{
-	FREEQ_COL_NULL,
-	FREEQ_COL_STRING,
-	FREEQ_COL_NUMBER,
-	FREEQ_COL_TIME,
-	FREEQ_COL_IPV4ADDR,
-	FREEQ_COL_IPV6ADDR,
-} freeq_coltype_t;
+typedef uint8_t freeq_coltype_t;
+#define	FREEQ_COL_NULL 0
+#define	FREEQ_COL_STRING 1
+#define FREEQ_COL_NUMBER 2 
+#define FREEQ_COL_TIME 3
+#define FREEQ_COL_IPV4ADDR 4
+#define FREEQ_COL_IPV6ADDR 5
+
+/* typedef enum */
+/* { */
+/* 	FREEQ_COL_NULL, */
+/* 	FREEQ_COL_STRING, */
+/* 	FREEQ_COL_NUMBER, */
+/* 	FREEQ_COL_TIME, */
+/* 	FREEQ_COL_IPV4ADDR, */
+/* 	FREEQ_COL_IPV6ADDR, */
+/* } freeq_coltype_t; */
 	
 struct freeq_column {
 	freeq_coltype_t coltype;

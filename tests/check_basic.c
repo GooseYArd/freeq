@@ -8,6 +8,11 @@
 //#include "src/libfreeq-private.h"
 #include "src/varint.h"
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include "buffer.h"
+
 const char *identity = "identity";
 const char *appname = "appname";
 const char *colnames[] = { "one", "two" };
@@ -245,6 +250,33 @@ START_TEST (test_varint_u64)
 }
 END_TEST
 
+START_TEST (test_buffer_putvarint32)
+{
+	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;      
+	int fd = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode);	
+	char buf[4096];	
+	uint32_t c = 123456;
+	union {		
+		uint64_t i;
+		struct longlong s;	
+	} result;
+	
+	buffer output, input;
+	buffer_init(&output,write,fd,buf,sizeof buf);
+
+	buffer_putvarint32(&output, c);
+	buffer_flush(&output);
+	buffer_close(&output);
+			   
+	fd = open("poop.txt", O_RDONLY, mode);	
+	buffer_init(&input,read,fd,buf,sizeof buf);
+
+	buffer_getvarint(&input, &(result.s));
+	//ck_assert_int_eq(uints64[_i], result.i);
+}
+END_TEST
+
+
 /* START_TEST (test_freeq_col_pack_unpack) */
 /* { */
 /* 	struct freeq_ctx *ctx; */
@@ -298,6 +330,7 @@ freeq_basic_suite (void)
 	tcase_add_loop_test (tc_core, test_varint_u32, 0, 4);
 	tcase_add_loop_test (tc_core, test_varint_64, 0, 7);
 	tcase_add_loop_test (tc_core, test_varint_u64, 0, 4);
+	tcase_add_test (tc_core, test_buffer_putvarint32);
 
 /*	tcase_add_test(tc_core, test_freeq_col_new_ret);
 	tcase_add_test(tc_core, test_freeq_col_new_ptr); 

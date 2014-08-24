@@ -26,14 +26,24 @@ START_TEST (test_freeq_col_pack_unpack)
 	
 	GSList *data_one = NULL;
 	GSList *data_two = NULL;
-	data_one = g_slist_append(data_one, GINT_TO_POINTER(1));
-	data_one = g_slist_append(data_one, GINT_TO_POINTER(2));
-	data_one = g_slist_append(data_one, GINT_TO_POINTER(1));
-
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(0xd));
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(0xd + 0xe));
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(0xe + 0xa));
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(0xa + 0xd));
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(0xd + 0xb));
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(0xb + 0xe));
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(0xe + 0xe));
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(0xe + 0xf));
+	
 	data_two = g_slist_append(data_two, "one");
 	data_two = g_slist_append(data_two, "two");
 	data_two = g_slist_append(data_two, "one");
-	
+	data_two = g_slist_append(data_two, "two");
+	data_two = g_slist_append(data_two, "one");
+	data_two = g_slist_append(data_two, "two");
+	data_two = g_slist_append(data_two, "one");
+	data_two = g_slist_append(data_two, "two");
+				  
 	freeq_new(&ctx, appname, identity);
 	freeq_table_new(ctx, 
 			"foo", 
@@ -46,12 +56,15 @@ START_TEST (test_freeq_col_pack_unpack)
 
 	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;      
 	int fd = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode);
+	fprintf(stderr, "open, writing\n");
 	freeq_table_write(ctx, t, fd);
 	close(fd);
+	fprintf(stderr, "done, open for read\n");
 
 	fd = open("poop.txt", O_RDONLY, mode);
 	freeq_table_read(ctx, &t2, fd);
-			 
+
+	fprintf(stderr, "done\n");
 	freeq_table_unref(t);
 	freeq_table_unref(t2);
 	freeq_unref(ctx);

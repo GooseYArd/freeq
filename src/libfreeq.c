@@ -369,7 +369,7 @@ FREEQ_EXPORT int freeq_table_new(struct freeq_ctx *ctx,
 		err(ctx, "unable to allocate memory for table\n");
 		return -ENOMEM;
 	}
-	t->name = name;
+	t->name = strdup(name);
 	t->numcols = numcols;
 	t->refcount = 1;
 	t->ctx = ctx;
@@ -402,6 +402,7 @@ FREEQ_EXPORT int freeq_table_new(struct freeq_ctx *ctx,
 	return 0;
 }
 
+
 void free_data(gpointer d)
 {
 	g_free(d);
@@ -423,22 +424,131 @@ struct freeq_ctx *ctx;
 struct freeq_table **t;
 int sock;
 {
-	union {		
+	union {
 		uint32_t i;
-		struct longlong s;	
-	} result;
+		struct longlong s;
+	} r;
 
+	char *identity;
+	char *name;
 	char buf[4096];
-	char strbuf[1024];	
+	char strbuf[1024] = { 0 };
+	//	struct freeq_table *tbl;
 	buffer input;
-	buffer_init(&input,read,sock,buf,sizeof buf);
-	fprintf(stderr, "allocated a buffer of size %d\n", sizeof(buf));
-	
-	buffer_getvarint(&input, &(result.s)); 
-	buffer_getn(&input, (char *)&strbuf, (ssize_t)result.i);
+//	int err;
+	int numcols = 0;
+	int more = 1;
+	int64_t *prev = 0;
 
-	fprintf(stderr, "identity: %s\n", (char *)&strbuf); 
+	freeq_coltype_t *coltypes;
+	char **colnames;
+
+	buffer_init(&input,read,sock,buf,sizeof buf);
+
+	fprintf(stderr, "allocated a buffer of size %d\n", sizeof(buf));
+
+	buffer_getvarint(&input, &(r.s));
+	buffer_getn(&input, (char *)&strbuf, (ssize_t)r.i);
+	identity = strndup((char *)&strbuf, r.i);
+
+	buffer_getvarint(&input, &(r.s));
+	buffer_getn(&input, (char *)&strbuf, (ssize_t)r.i);
+	name = strndup((char *)&strbuf, r.i);
+
+	fprintf(stderr, "identity: %s\n", identity);
+	fprintf(stderr, "name: %s\n", name);
+
+	buffer_getvarint(&input, &(r.s));
+	numcols = r.i;
+
+	fprintf(stderr, "columns: %d\n", numcols);
+	coltypes = calloc(numcols, sizeof(freeq_coltype_t));
+	colnames = calloc(numcols, sizeof(colnames));
 	
+	for (int i = 0; i < numcols; i++)
+	{
+		buffer_getc(&input, (char *)&coltypes[i]);
+		fprintf(stderr, "COL %d TYPE %d\n", i, coltypes[i]);
+	}
+
+	for (int i = 0; i < numcols; i++) 
+	{
+		buffer_getvarint(&input, &(r.s));
+		buffer_getn(&input, (char *)&strbuf, r.i);
+		colnames[i] = strndup((char *)&strbuf, r.i);
+		fprintf(stderr, "DECODED NAME: len %d %s\n", r.i, colnames[i]);		
+	}
+
+	GSList *coldatas[numcols];
+
+	printf("%p", coldatas);
+	/* you know you're done when the buffer is < buflen dumbass */
+
+	int i = 0;
+	while (more) 
+	{
+		for (int j = 0; j < numcols; j++) 
+		{
+			fprintf(stderr, "row %d col %d type %d name %s\n", i, j, coltypes[j], colnames[j]);
+			switch (coltypes[j]) {
+			case FREEQ_COL_STRING:
+				fprintf(stderr, "decoding column %d, type is FREEQ_COL_STRING\n", j);
+				buffer_getvarint(&input, &(r.s));
+				fprintf(stderr, "raw len %d\n", r.i);
+				dezigzag32(&(r.s));
+				if (r.i > 0) 
+				{
+					fprintf(stderr, "new string len %d\n", r.i);
+					buffer_getn(&input, (char *)&strbuf, r.i);
+					colnames[i] = strndup((char *)&strbuf, r.i);
+				} 
+				else if (r.i < 0) 
+				{
+					fprintf(stderr, "cached string index %d\n", r.i);
+				} 
+				else 
+				{
+					fprintf(stderr, "empty string %d\n", r.i);
+				}
+				break;
+			case FREEQ_COL_NUMBER:
+				buffer_getvarint(&input, &(r.s));
+				dezigzag32(&(r.s));
+				prev = g_slist_nth_data(coldatas[j], 0);
+				coldatas[j] = g_slist_prepend(coldatas[j], GINT_TO_POINTER(prev + r.i));
+				break;
+			case FREEQ_COL_IPV4ADDR:
+				break;
+			case FREEQ_COL_TIME:
+				break;
+			default:
+				break;
+			}			
+		}
+		i++;
+		more = 0;
+		if (input.p >= input.a) 
+		{
+			int err = buffer_feed(&input);
+			if (err) 
+			{
+				more = 0;
+			}
+		}
+	}
+
+	/* err = freeq_table_new(ctx,  */
+	/*		      name,  */
+	/*		      numcols, */
+	/*		      (freeq_coltype_t *)&coltypes,  */
+	/*		      (const char **)&colnames,  */
+	/*		      &tbl); */
+
+	/* if (err) { */
+	/*	free(identity); */
+	/*	free(name); */
+	/*	return err; */
+	/* } */
 }
 
 FREEQ_EXPORT int freeq_table_write(ctx, t, sock)
@@ -462,25 +572,28 @@ int sock;
 	char buf[4096];
 	buffer output;
 	buffer_init(&output,write,sock,buf,sizeof buf);
+	
+	slen = strlen(ctx->identity);
+	buffer_putvarint32(&output, slen);
+	buffer_put(&output, (const char *)ctx->identity, slen);
 
-	slen = strlen(ctx->identity) + 1;
-	buffer_put(&output, &slen, sizeof(slen));
-	buffer_puts(&output, (const char *)ctx->identity);
+	slen = strlen(t->name);
+	buffer_putvarint32(&output, slen);
+	buffer_put(&output, (const char *)t->name, slen);
 
-	slen = strlen(t->name) + 1;
-	buffer_put(&output, &slen, sizeof(slen));
-	buffer_puts(&output, (const char *)t->name);
+	buffer_putvarint32(&output, c);
 
-	buffer_put(&output, (char *)&c, sizeof(c));
-
-	for (i=0; i < c; i++)
+	for (i=0; i < c; i++) {
+		fprintf(stderr, "COL %d COLTYPE %d\n", i, t->columns[i].coltype);
 		buffer_put(&output, (char *)&(t->columns[i].coltype), sizeof(freeq_coltype_t));
+	}
 
 	for (i=0; i < c; i++)
 	{
-		slen = strlen(t->columns[i].name) + 1;
-		buffer_put(&output, &slen, sizeof(slen));
-		buffer_puts(&output, (const char *)t->columns[i].name);
+		slen = strlen(t->columns[i].name);
+		fprintf(stderr, "PUT SLEN %d NAME %s\n", slen, t->columns[i].name);
+		buffer_putvarint32(&output, slen);
+		buffer_put(&output, (const char *)t->columns[i].name, slen);
 	}
 
 	for (i=0; i < c; i++)
@@ -493,17 +606,17 @@ int sock;
 	}
 
 	for (i = 0; i < t->numrows; i++) {
-		fprintf(stderr, "row %d\n", i);
 		for (int j = 0; j < c; j++)
 		{
-			fprintf(stderr, "col %d\n", j);
+			fprintf(stderr, "row %d col %d type %d\n", i, j, t->columns[j].coltype);
 			switch (t->columns[j].coltype)
 			{
 			case FREEQ_COL_STRING:
+				/* use the g_slist iterator here instead */
 				val = g_slist_nth_data(t->columns[j].data, i);
-				int32_t len = strlen(val);
-				fprintf(stderr, "string %s len %d\n", val, len);
-				if (len > 0)
+				slen = strlen(val);
+				fprintf(stderr, "string %s len %d\n", val, slen);
+				if (slen > 0)
 				{
 					gpointer elem = g_hash_table_lookup(strtbls[j], val);
 					fprintf(stderr, "looking for %s (in %p) %p\n", val, strtbls[j], g_hash_table_lookup(strtbls[j], "one"));
@@ -514,20 +627,22 @@ int sock;
 						*idx = i;
 						g_hash_table_insert(strtbls[j], val, idx);
 						fprintf(stderr, "strtbls[%d] size is %d\n",j, g_hash_table_size(strtbls[j]));
-						buffer_put(&output, (const char *)&len, sizeof(len));
-						buffer_puts(&output, val);
+						buffer_putvarint32(&output, slen);
+						buffer_put(&output, val, slen);
 					}
 					else
 					{
 						int32_t idx = *(int32_t *)elem;
-						ilen = _pbcV_zigzag32(-idx, vibuf);
-						buffer_put(&output, (const char *)&vibuf, ilen);
-						fprintf(stderr, "we already saw %s so we're sending %d\n", val, -idx);
+						/* ilen = _pbcV_zigzag32(-idx, vibuf);
+						   buffer_put(&output, (const char *)&vibuf, ilen); */
+						buffer_putvarint(&output, idx - i);
+						fprintf(stderr, "we already saw %s so we're sending %d\n", val, idx - i);
+						/* TODO: replace the value */
 					}
 				}
 				else
 				{
-					fprintf(stderr, "empty string, sending a null\n", val, len);
+					fprintf(stderr, "empty string, sending a null\n", val, slen);
 					b += write(sock, 0, 1);
 				}
 				break;
@@ -551,18 +666,13 @@ int sock;
 		}
 	}
 	buffer_flush(&output);
-
 	fprintf(stderr, "raw %d compressed %d bytes\n", bytes, dbytes);
 	return b;
 }
 
-
-/* FREEQ_EXPORT int freeq_table_to_text(struct freeq_ctx *ctx, struct freeq_table *table) */
-/* { */
-/*	const char **strarrp = NULL; */
-/*	int *intarrp = NULL; */
-/*	struct freeq_column_segment *seg; */
-/*	struct freeq_column *colp = table->columns; */
+FREEQ_EXPORT int freeq_table_print(FILE *of, struct freeq_table *t) 
+{
+	fprintf(of, "%s\nn", 
 
 /*	while (colp != NULL)  */
 /*	{ */
