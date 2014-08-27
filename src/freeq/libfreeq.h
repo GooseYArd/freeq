@@ -89,10 +89,11 @@ struct freeq_table {
 	struct freeq_ctx *ctx;
 	int refcount;
 	int numrows;
-	const char *name;
+	char *name;
 	int numcols;
+	bool destroy_data;
 	struct freeq_table *next;
-	struct freeq_column columns[];
+	struct freeq_column columns[];	
 };
 
 void freeq_cbuf_write(struct freeq_cbuf *b, 
@@ -101,7 +102,7 @@ void freeq_cbuf_write(struct freeq_cbuf *b,
 
 void freeq_table_print(struct freeq_ctx *ctx,
 		       struct freeq_table *table,
-		       FILE *f);
+		       FILE *of);
 
 int freeq_table_column_new(struct freeq_ctx *ctx,
 			   struct freeq_table *table,
@@ -146,7 +147,15 @@ int freeq_table_new(struct freeq_ctx *ctx,
 		    int numcols,
 		    freeq_coltype_t coltypes[],
 		    const char *colnames[],
-		    struct freeq_table **table, ...);
+		    struct freeq_table **table, 
+		    bool destroy_data,
+		    ...);
+
+int freeq_table_new_fromcols(struct freeq_ctx *ctx,
+			     const char *name,
+			     int numcols,
+			     struct freeq_table **table, 
+			     bool destroy_data);
 
 int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *buf, size_t bufsize, struct freeq_table **table);
 int freeq_table_to_text(struct freeq_ctx *ctx, struct freeq_table *table);

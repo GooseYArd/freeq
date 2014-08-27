@@ -271,17 +271,29 @@ FREEQ_EXPORT struct freeq_table *freeq_table_unref(struct freeq_table *table)
 	if (table == NULL)
 		return NULL;
 
-	if (table->next != NULL)
-		freeq_table_unref(table->next);
-
 	table->refcount--;
 	if (table->refcount > 0)
 		return NULL;
 
-	//for (int i=0; i < table->numcols; i++)
-	//	freeq_column_unref(&(table->columns[i]));
+	free(table->name);
+	for (int i=0; i < table->numcols; i++)
+		free(table->columns[i].name);
+	
+	if (table->destroy_data)
+	{
+		for (int i=0; i < table->numcols; i++) 
+		{
+			dbg(table->ctx, "freeing column %d data\n", i);
+			if (table->columns[i].coltype == FREEQ_COL_STRING)
+				g_slist_free_full(table->columns[i].data, g_free);
+			else
+				g_slist_free(table->columns[i].data);
+		}
+	} 
+	else 
+		dbg(table->ctx, "destroy_data not set, not freeing column data\n");
 
-	//dbg(table->ctx, "context %p released\n", table);
+	dbg(table->ctx, "table %p released\n", table);
 	free(table);
 	return NULL;
 }
@@ -307,44 +319,12 @@ FREEQ_EXPORT int freeq_error_write_sock(struct freeq_ctx *ctx, const char *errms
 	return freeq_table_write(ctx, &errtbl, sock);
 }
 
-FREEQ_EXPORT void freeq_table_print(struct freeq_ctx *ctx,
-				    struct freeq_table *t,
-				    FILE *f)
-{
-	fprintf(f, "name: %s\n", t->name);
-	for (int j = 0; j < t->numcols; j++) {
-		fprintf(f, "%s", t->columns[j].name);
-		fprintf(f, j < (t->numcols - 1) ? "," : "\n");
-	}
-
-	dbg(ctx, "numrows: %d\n", t->numrows);
-	for (int i = 0; i < t->numrows; i++) {
-		for (int j = 0; j < t->numcols; j++) {
-			switch (t->columns[j].coltype)
-			{
-			case FREEQ_COL_STRING:
-				fprintf(f, "%s", g_slist_nth_data(t->columns[j].data, i));
-				break;
-			case FREEQ_COL_NUMBER:
-				fprintf(f, "%d", g_slist_nth_data(t->columns[j].data, i));
-				break;
-			default:
-				break;
-			}
-			fprintf(f, j < (t->numcols - 1) ? "," : "\n");
-		}
-	}
-}
-
 bool ragged(int c, int rlens[], int *min) {
 	*min = rlens[0];
-	fprintf(stderr, "min set to %d\n", *min);
 	bool ragged = false;
 
 	for (int i = 0; i < c; i++) {
-		fprintf(stderr, "len of col %d is %d\n", i, rlens[i]);
 		if (rlens[i] < *min) {
-			fprintf(stderr, "adjusted min to %d\n", rlens[i]);
 			*min = rlens[i];
 			ragged = true;
 		}
@@ -356,26 +336,31 @@ FREEQ_EXPORT int freeq_table_new(struct freeq_ctx *ctx,
 				 const char *name,
 				 int numcols,
 				 freeq_coltype_t coltypes[],
-				 const char *colnames[],
+				 const char *colnames[],				 
 				 struct freeq_table **table,
+				 bool destroy_data,
 				 ...)
 {
 	va_list argp;
 	int collens[numcols];
 	struct freeq_table *t;
-	t = (struct freeq_table *)malloc(sizeof(struct freeq_table) + sizeof(struct freeq_column) * numcols);
-
+	struct freeq_column *cols;
+	
+	t = (struct freeq_table *)malloc(sizeof(struct freeq_table) + (numcols * sizeof(struct freeq_column)));
+	
 	if (!t) {
 		err(ctx, "unable to allocate memory for table\n");
 		return -ENOMEM;
 	}
+	
 	t->name = strdup(name);
 	t->numcols = numcols;
 	t->refcount = 1;
+	t->numrows = 0;
 	t->ctx = ctx;
 
 	dbg(ctx, "going to allocate columns...\n");
-	va_start(argp, table);
+	va_start(argp, destroy_data);
 
 	for (int i = 0; i < t->numcols; i++)
 	{
@@ -402,22 +387,33 @@ FREEQ_EXPORT int freeq_table_new(struct freeq_ctx *ctx,
 	return 0;
 }
 
-
-void free_data(gpointer d)
+FREEQ_EXPORT int freeq_table_new_fromcols(struct freeq_ctx *ctx,
+					  const char *name,
+					  int numcols,
+					  struct freeq_table **table,
+					  bool destroy_data)
 {
-	g_free(d);
+	va_list argp;
+	int collens[numcols];
+	struct freeq_table *t;
+	struct freeq_column *cols;
+	
+	t = (struct freeq_table *)malloc(sizeof(struct freeq_table) + (numcols * sizeof(struct freeq_column)));
+	if (!t) {
+		err(ctx, "unable to allocate memory for table\n");
+		return -ENOMEM;
+	}
+	
+	t->name = strdup(name);
+	t->numcols = numcols;
+	t->numrows = 0;
+	t->destroy_data = destroy_data;
+	t->refcount = 1;
+	t->ctx = ctx;
+	*table = t;
+	return 0;
 }
 
-int bsz(int num) {
-	int n = 0;
-	if (num > 0) {
-		while (num != 0) {
-			num >>= 8;
-			n++;
-		}
-	}
-	return n;
-}
 
 FREEQ_EXPORT int freeq_table_read(ctx, t, sock)
 struct freeq_ctx *ctx;
@@ -432,90 +428,85 @@ int sock;
 	char *identity;
 	char *name;
 	char buf[4096];
-	char strbuf[1024] = { 0 };
-	//	struct freeq_table *tbl;
+	char strbuf[1024] = {0};	
+	struct freeq_table *tbl;
+	struct freeq_column *cols;
 	buffer input;
-//	int err;
 	int numcols = 0;
 	int more = 1;
 	int64_t *prev = 0;
-
-	freeq_coltype_t *coltypes;
-	char **colnames;
-
+      
 	buffer_init(&input,read,sock,buf,sizeof buf);
-
-	fprintf(stderr, "allocated a buffer of size %d\n", sizeof(buf));
 
 	buffer_getvarint(&input, &(r.s));
 	buffer_getn(&input, (char *)&strbuf, (ssize_t)r.i);
-	identity = strndup((char *)&strbuf, r.i);
+	//identity = strndup((char *)&strbuf, r.i);
 
 	buffer_getvarint(&input, &(r.s));
 	buffer_getn(&input, (char *)&strbuf, (ssize_t)r.i);
 	name = strndup((char *)&strbuf, r.i);
 
-	fprintf(stderr, "identity: %s\n", identity);
-	fprintf(stderr, "name: %s\n", name);
-
 	buffer_getvarint(&input, &(r.s));
 	numcols = r.i;
 
-	fprintf(stderr, "columns: %d\n", numcols);
-	coltypes = calloc(numcols, sizeof(freeq_coltype_t));
-	colnames = calloc(numcols, sizeof(colnames));
-	
-	for (int i = 0; i < numcols; i++)
+	int err = freeq_table_new_fromcols(ctx,
+					   name,
+					   numcols,
+					   &tbl,
+					   true);	
+	if (err)
 	{
-		buffer_getc(&input, (char *)&coltypes[i]);
-		fprintf(stderr, "COL %d TYPE %d\n", i, coltypes[i]);
+		free(identity);
+		free(name);
+		return -ENOMEM;
 	}
 
-	for (int i = 0; i < numcols; i++) 
+	free(name);
+	cols = tbl->columns;
+
+	for (int i = 0; i < numcols; i++)
+		buffer_getc(&input, (char *)&(cols[i].coltype));
+
+	for (int i = 0; i < numcols; i++)
 	{
 		buffer_getvarint(&input, &(r.s));
 		buffer_getn(&input, (char *)&strbuf, r.i);
-		colnames[i] = strndup((char *)&strbuf, r.i);
-		fprintf(stderr, "DECODED NAME: len %d %s\n", r.i, colnames[i]);		
+		cols[i].name = strndup((char *)&strbuf, r.i);
 	}
 
-	GSList *coldatas[numcols];
-
-	printf("%p", coldatas);
 	/* you know you're done when the buffer is < buflen dumbass */
-
-	int i = 0;
-	while (more) 
+	while (more)
 	{
-		for (int j = 0; j < numcols; j++) 
+		for (int j = 0; j < numcols; j++)
 		{
-			fprintf(stderr, "row %d col %d type %d name %s\n", i, j, coltypes[j], colnames[j]);
-			switch (coltypes[j]) {
+			switch (cols[j].coltype) {
 			case FREEQ_COL_STRING:
-				fprintf(stderr, "decoding column %d, type is FREEQ_COL_STRING\n", j);
 				buffer_getvarint(&input, &(r.s));
-				fprintf(stderr, "raw len %d\n", r.i);
 				dezigzag32(&(r.s));
-				if (r.i > 0) 
+				if (r.i > 0)
 				{
-					fprintf(stderr, "new string len %d\n", r.i);
 					buffer_getn(&input, (char *)&strbuf, r.i);
-					colnames[i] = strndup((char *)&strbuf, r.i);
-				} 
-				else if (r.i < 0) 
+					cols[j].data = g_slist_prepend(cols[j].data, strndup((char *)&strbuf, r.i));
+				}
+				else if (r.i < 0)
 				{
-					fprintf(stderr, "cached string index %d\n", r.i);
-				} 
-				else 
+					dbg(ctx, "cached string index %d\n", r.i);
+					cols[j].data = g_slist_prepend(cols[j].data, g_slist_nth_data(cols[j].data, -r.i));
+				}
+				else
 				{
-					fprintf(stderr, "empty string %d\n", r.i);
+					/* we shouldn't do this, if we
+					 * have an empty string we
+					 * should just send it once
+					 * and then send the offset */
+					dbg(ctx, "empty string %d\n", r.i);
 				}
 				break;
 			case FREEQ_COL_NUMBER:
 				buffer_getvarint(&input, &(r.s));
 				dezigzag32(&(r.s));
-				prev = g_slist_nth_data(coldatas[j], 0);
-				coldatas[j] = g_slist_prepend(coldatas[j], GINT_TO_POINTER(prev + r.i));
+				prev = g_slist_nth_data(cols[j].data, r.i);
+				cols[j].data = g_slist_prepend(cols[j].data, GINT_TO_POINTER(prev + r.i));
 				break;
 			case FREEQ_COL_IPV4ADDR:
 				break;
@@ -523,32 +514,23 @@ int sock;
 				break;
 			default:
 				break;
-			}			
+			}
 		}
-		i++;
+		tbl->numrows++;
 		more = 0;
-		if (input.p >= input.a) 
+		if (input.p >= input.a)
 		{
 			int err = buffer_feed(&input);
-			if (err) 
+			if (err)
 			{
 				more = 0;
 			}
 		}
 	}
 
-	/* err = freeq_table_new(ctx,  */
-	/*		      name,  */
-	/*		      numcols, */
-	/*		      (freeq_coltype_t *)&coltypes,  */
-	/*		      (const char **)&colnames,  */
-	/*		      &tbl); */
+	*t = tbl;
+	return 0;
 
-	/* if (err) { */
-	/*	free(identity); */
-	/*	free(name); */
-	/*	return err; */
-	/* } */
 }
 
 FREEQ_EXPORT int freeq_table_write(ctx, t, sock)
@@ -559,20 +541,22 @@ int sock;
 	int i = 0;
 	int c = t->numcols;
 	int v, dv;
-	int b = 0;
+	int bytes = 0;
 	gchar *val;
 	uint8_t vibuf[10];
 	unsigned short ilen;
 	unsigned char slen = 0;
-	int bytes = 0, dbytes = 0;
+       
 	// use a union here
 	GHashTable *strtbls[t->numcols];
 	int prev[t->numcols];
 
+	GSList *colnxt[t->numcols];
+
 	char buf[4096];
 	buffer output;
 	buffer_init(&output,write,sock,buf,sizeof buf);
-	
+
 	slen = strlen(ctx->identity);
 	buffer_putvarint32(&output, slen);
 	buffer_put(&output, (const char *)ctx->identity, slen);
@@ -584,14 +568,14 @@ int sock;
 	buffer_putvarint32(&output, c);
 
 	for (i=0; i < c; i++) {
-		fprintf(stderr, "COL %d COLTYPE %d\n", i, t->columns[i].coltype);
+		dbg(ctx, "col %d coltype %d\n", i, t->columns[i].coltype);
 		buffer_put(&output, (char *)&(t->columns[i].coltype), sizeof(freeq_coltype_t));
 	}
 
 	for (i=0; i < c; i++)
 	{
 		slen = strlen(t->columns[i].name);
-		fprintf(stderr, "PUT SLEN %d NAME %s\n", slen, t->columns[i].name);
+		dbg(ctx, "put slen %d name %s\n", slen, t->columns[i].name);
 		buffer_putvarint32(&output, slen);
 		buffer_put(&output, (const char *)t->columns[i].name, slen);
 	}
@@ -602,57 +586,45 @@ int sock;
 			strtbls[i] = g_hash_table_new_full(g_str_hash,
 							   g_str_equal,
 							   NULL,
-							   g_free);
+							   NULL);
+		colnxt[i] = t->columns[i].data;
 	}
 
 	for (i = 0; i < t->numrows; i++) {
 		for (int j = 0; j < c; j++)
 		{
-			fprintf(stderr, "row %d col %d type %d\n", i, j, t->columns[j].coltype);
+			dbg(ctx, "row %d col %d type %d\n", i, j, t->columns[j].coltype);
 			switch (t->columns[j].coltype)
 			{
-			case FREEQ_COL_STRING:
-				/* use the g_slist iterator here instead */
-				val = g_slist_nth_data(t->columns[j].data, i);
+			case FREEQ_COL_STRING:			       
+				val = colnxt[j]->data;
 				slen = strlen(val);
-				fprintf(stderr, "string %s len %d\n", val, slen);
-				if (slen > 0)
+				if ((val == NULL) || (slen == 0)) {
+					buffer_putbyte(&output, 0);
+					break;
+				}
+				dbg(ctx, "string %s len %d\n", val, slen);
+				gpointer elem = g_hash_table_lookup(strtbls[j], val);
+				dbg(ctx, "looking for %s (in %p) %p\n", val, strtbls[j], g_hash_table_lookup(strtbls[j], "one"));
+				if (elem == NULL)
 				{
-					gpointer elem = g_hash_table_lookup(strtbls[j], val);
-					fprintf(stderr, "looking for %s (in %p) %p\n", val, strtbls[j], g_hash_table_lookup(strtbls[j], "one"));
-					if (elem == NULL)
-					{
-						fprintf(stderr, "havent seen string %s, adding it at position %d/%d in %p\n", val, i, j, strtbls[j]);
-						int32_t *idx = malloc(sizeof(int));
-						*idx = i;
-						g_hash_table_insert(strtbls[j], val, idx);
-						fprintf(stderr, "strtbls[%d] size is %d\n",j, g_hash_table_size(strtbls[j]));
-						buffer_putvarint32(&output, slen);
-						buffer_put(&output, val, slen);
-					}
-					else
-					{
-						int32_t idx = *(int32_t *)elem;
-						/* ilen = _pbcV_zigzag32(-idx, vibuf);
-						   buffer_put(&output, (const char *)&vibuf, ilen); */
-						buffer_putvarint(&output, idx - i);
-						fprintf(stderr, "we already saw %s so we're sending %d\n", val, idx - i);
-						/* TODO: replace the value */
-					}
+					dbg(ctx, "havent seen string %s, adding it at position %d/%d in %p\n", val, i, j, strtbls[j]);
+					g_hash_table_insert(strtbls[j], val, GINT_TO_POINTER(i));						
+					dbg(ctx, "strtbls[%d] size is %d\n",j, g_hash_table_size(strtbls[j]));
+					buffer_putvarint32(&output, slen);
+					buffer_put(&output, val, slen);
 				}
 				else
 				{
-					fprintf(stderr, "empty string, sending a null\n", val, slen);
-					b += write(sock, 0, 1);
+					int32_t idx = GPOINTER_TO_INT(elem);
+					buffer_putvarint(&output, idx - i);
+					g_hash_table_replace(strtbls[j], val, GINT_TO_POINTER(idx));
 				}
-				break;
-
+				break;				
 			case FREEQ_COL_NUMBER:
-				v = GPOINTER_TO_INT(g_slist_nth_data(t->columns[j].data, i));
-				dv = abs(v - prev[j]);
-				ilen = _pbcV_encode(dv, vibuf);
-				buffer_put(&output, (const char *)&vibuf, ilen);
-				fprintf(stderr, "added %d bytes\n", ilen);
+				v = GPOINTER_TO_INT(colnxt[j]->data);
+				buffer_putvarintsigned(&output, v - prev[j]);
+				dbg(ctx, "added %d bytes\n", ilen);
 				prev[j] = v;
 				break;
 			case FREEQ_COL_IPV4ADDR:
@@ -663,49 +635,61 @@ int sock;
 				//dbg(ctx, "coltype %d not yet implemented\n", col->coltype);
 				break;
 			}
+			colnxt[j] = g_slist_next(colnxt[j]);		
 		}
 	}
+	for (i = 0; i < c; i++)
+		if (strtbls[i] != NULL)
+			g_hash_table_destroy(strtbls[i]);
 	buffer_flush(&output);
-	fprintf(stderr, "raw %d compressed %d bytes\n", bytes, dbytes);
-	return b;
+	return bytes;
 }
 
-FREEQ_EXPORT int freeq_table_print(FILE *of, struct freeq_table *t) 
+FREEQ_EXPORT void freeq_table_print(struct freeq_ctx *ctx, struct freeq_table *t, FILE *of)
 {
-	fprintf(of, "%s\nn", 
+	GSList *colp[t->numcols];
+       	
+	const char *coltypes[] = { "null",
+				   "string",
+				   "number",
+				   "time",
+				   "ipv4_addr",
+				   "ipv6_addr" };
 
-/*	while (colp != NULL)  */
-/*	{ */
-/*		printf("%s", colp->name); */
-/*		colp = colp->next; */
-/*		if (colp != NULL) */
-/*			printf(", "); */
-/*	} */
-/*	printf("\n"); */
+	memset(colp, 0, t->numcols * sizeof(GSList *) );
+	for (int j = 0; j < t->numcols; j++)
+	{
+		fprintf(stderr, "FUUUUUUUUCK\n");
+		colp[j] = t->columns[j].data;
+	}
+	fprintf(stderr, "colp[0] = %p\n", colp[0]);
+	fprintf(stderr, "colp[1] = %p\n", colp[1]);
+	//fprintf(of, "%s\n", t->identity);
+	fprintf(of, "%s\n", t->name);
 
-/*	for (unsigned i = 0; i < table->numrows; i++) */
-/*	{ */
-/*		colp = table->columns; */
-/*		while (colp != NULL)  */
-/*		{ */
-/*			seg = colp->segments; */
-/*			strarrp = (const char **)seg->data; */
-/*			intarrp = (int *)seg->data; */
-/*			switch (colp->coltype) */
-/*			{ */
-/*			case FREEQ_COL_STRING: */
-/*				printf("%s", strarrp[i]); */
-/*				break; */
-/*			case FREEQ_COL_NUMBER: */
-/*				printf("%d", intarrp[i]); */
-/*				break; */
-/*			default: */
-/*				break; */
-/*			} */
-/*			if (colp != NULL) */
-/*				printf(", "); */
-/*			colp = colp->next; */
-/*		} */
-/*		printf("\n"); */
-/*	} */
-/* } */
+	for (int j=0; j < t->numcols; j++)
+		fprintf(of, "%s%s", t->columns[j].name, j < t->numcols - 1 ? ", " : "\n");
+
+	for (int j=0; j < t->numcols; j++)
+		fprintf(of, "%s%s", coltypes[t->columns[j].coltype], j < t->numcols - 1 ? ", " : "\n");
+
+	for (int i=0; i < t->numrows; i++)
+	{
+		for (int j=0; j < t->numcols; j++)
+		{
+			switch (t->columns[j].coltype)
+			{
+			case FREEQ_COL_STRING:
+				fprintf(of, "%p/%s", colp[j], colp[j]->data);
+				break;
+			case FREEQ_COL_NUMBER:
+				fprintf(of, "%p/%d", colp[j], GPOINTER_TO_INT(colp[j]->data));
+				break;
+			default:
+				break;
+			}
+			colp[j] = g_slist_next(colp[j]);
+		}
+		fprintf(of, "\n");
+	}
+}
