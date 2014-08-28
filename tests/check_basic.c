@@ -18,6 +18,12 @@ const char *appname = "appname";
 const char *colnames[] = { "one", "two" };
 freeq_coltype_t coltypes[] = { 1, 2 };
 
+char buf[4096];
+typedef union {
+	uint64_t i;
+	struct longlong s;
+} result_t;
+
 START_TEST (test_freeq_new)
 {
 	struct freeq_ctx *ctx;
@@ -95,15 +101,16 @@ START_TEST (test_freeq_table_new_retcode)
 	data_one = g_slist_append(data_one, GINT_TO_POINTER(2));
 	data_two = g_slist_append(data_two, "one");
 	data_two = g_slist_append(data_two, "two");
-	
+
 	freeq_new(&ctx, appname, identity);
-	v = freeq_table_new(ctx, 
+	v = freeq_table_new(ctx,
 			    "foo",
 			    2,
-			    (freeq_coltype_t *)&coltypes, 
+			    (freeq_coltype_t *)&coltypes,
 			    (const char **)&colnames,
-			    &t, 
-			    data_one, 
+			    &t,
+			    true,
+			    data_one,
 			    data_two);
 	ck_assert_int_eq(v, 0);
 	freeq_table_unref(t);
@@ -117,12 +124,13 @@ START_TEST (test_freeq_table_new_ptr_nullcol)
 	struct freeq_table *t;
 	freeq_new(&ctx, appname, identity);
 	freeq_set_log_priority(ctx, 10);
-	freeq_table_new(ctx, 
+	freeq_table_new(ctx,
 			"foo",
 			2,
-			(freeq_coltype_t *)&coltypes, 
-			(const char **)&colnames, 
+			(freeq_coltype_t *)&coltypes,
+			(const char **)&colnames,
 			&t,
+			false,
 			NULL
 		);
 
@@ -143,12 +151,13 @@ START_TEST (test_freeq_table_new_ptr)
 	data_two = g_slist_append(data_two, "two");
 
 	freeq_new(&ctx, appname, identity);
-	freeq_table_new(ctx, 
+	freeq_table_new(ctx,
 			"foo",
 			2,
-			(freeq_coltype_t *)&coltypes, 
-			(const char **)&colnames, 
+			(freeq_coltype_t *)&coltypes,
+			(const char **)&colnames,
 			&t,
+			true,
 			data_one,
 			data_two
 		);
@@ -161,155 +170,171 @@ START_TEST (test_freeq_table_new_ptr)
 }
 END_TEST
 
-static const int ints32[] = {INT_MIN, 
-			     -0x1000000, 
-			     -1,
-			     0,
-			     1,
-			     0x10000000,
-			     INT_MAX
-};
-
 START_TEST (test_varint_32)
 {
-	uint8_t buffer[10];
-	union {		
-		int32_t i;
-		struct longlong s;	
-	} result;
-	fprintf(stderr, "check: %x\n", ints32[_i]);
-
-	_pbcV_zigzag32(ints32[_i], buffer);			
-	_pbcV_decode(buffer, &(result.s));
-	_pbcV_dezigzag32(&(result.s));
-
-	ck_assert_int_eq(ints32[_i], result.i);
-}
-END_TEST
-
-static const uint32_t uints32[] = { 0,
+	static const int vals[] = {INT_MIN,
+				   -0x1000000,
+				   -1,
+				   0,
 				   1,
 				   0x10000000,
-				   UINT_MAX };
+				   INT_MAX
+	};
 
-START_TEST (test_varint_u32)
-{
-	uint8_t buffer[10];
-	union {		
-		uint32_t i;
-		struct longlong s;	
-	} result;
-	fprintf(stderr, "check: %x\n", ints32[_i]);
+	int b;
+	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+	int fd = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode);
 
-	_pbcV_encode32(uints32[_i], buffer);			
-	_pbcV_decode(buffer, &(result.s));
-	ck_assert_int_eq(uints32[_i], result.i);
-}
-END_TEST
-
-static const int64_t ints64[] = {LONG_MIN, 
-				 -0x1000000000000000, 
-				 -1,
-				 0,
-				 1,
-				  0x1000000000000000,
-				  LONG_MAX
-};
-
-START_TEST (test_varint_64)
-{
-	uint8_t buffer[10];
-	union {		
-		int64_t i;
-		struct longlong s;	
-	} result;
-	_pbcV_zigzag(ints64[_i], buffer);			
-	_pbcV_decode(buffer, &(result.s));
-	_pbcV_dezigzag64(&(result.s));
-	ck_assert_int_eq(ints64[_i], result.i);
-}
-END_TEST
-
-
-static const uint64_t uints64[] = {0,
-				 1,
-				  0x1000000000000000,
-				  ULONG_MAX
-};
-
-START_TEST (test_varint_u64)
-{
-	uint8_t buffer[10];
-	union {		
-		uint64_t i;
-		struct longlong s;	
-	} result;
-	_pbcV_encode(uints64[_i], buffer);			
-	_pbcV_decode(buffer, &(result.s));
-	ck_assert_int_eq(uints64[_i], result.i);
-}
-END_TEST
-
-START_TEST (test_buffer_putvarint32)
-{
-	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;      
-	int fd = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode);	
-	char buf[4096];	
-	uint32_t c = 123456;
-	union {		
-		uint64_t i;
-		struct longlong s;	
-	} result;
-	
 	buffer output, input;
 	buffer_init(&output,write,fd,buf,sizeof buf);
 
-	buffer_putvarint32(&output, c);
+	int bytes[7];
+	for (int i = 0; i < 7; i++)
+		bytes[i] = buffer_putvarintsigned32(&output, vals[i]);
+
 	buffer_flush(&output);
 	buffer_close(&output);
-			   
-	fd = open("poop.txt", O_RDONLY, mode);	
+
+	fd = open("poop.txt", O_RDONLY, mode);
 	buffer_init(&input,read,fd,buf,sizeof buf);
 
-	buffer_getvarint(&input, &(result.s));
-	//ck_assert_int_eq(uints64[_i], result.i);
+	for (int i = 0; i < 7; i++)
+	{
+		int32_t v;
+		struct longlong r;
+		b = buffer_getvarint(&input, &r);
+		dezigzag32(&r);
+		v = r.low;
+		ck_assert_int_eq(b, bytes[i]);
+		ck_assert_int_eq(vals[i], v);
+	}
+
+	buffer_close(&input);
 }
 END_TEST
 
 
-/* START_TEST (test_freeq_col_pack_unpack) */
-/* { */
-/* 	struct freeq_ctx *ctx; */
-/* 	struct freeq_table *t, *t2; */
-/* 	GSList *data_one = NULL; */
-/* 	GSList *data_two = NULL; */
-/* 	data_one = g_slist_append(data_one, GINT_TO_POINTER(1)); */
-/* 	data_one = g_slist_append(data_one, GINT_TO_POINTER(2)); */
-/* 	data_two = g_slist_append(data_two, "one"); */
-/* 	data_two = g_slist_append(data_two, "two"); */
-	
-/* 	freeq_new(&ctx, appname, identity); */
-	
-/* 	freeq_table_new(ctx,  */
-/* 			"foo", */
-/* 			2, */
-/* 			(freeq_coltype_t *)&coltypes,  */
-/* 			(const char **)&colnames,  */
-/* 			&t, */
-/* 			data_one, */
-/* 			data_two */
-/* 		); */
-		
-/* 	msgpack_sbuffer_init(&sbuf); */
-/* 	ck_assert_int_eq(freeq_table_pack_msgpack(&sbuf, ctx, t), 0); */
-/* 	ck_assert_int_eq(freeq_table_header_from_msgpack(ctx, sbuf.data, sbuf.size, &t2), 0); */
+START_TEST (test_varint_u32)
+{
+	static const uint32_t vals[] = { 0,
+					 1,
+					 0x10000000,
+					 UINT_MAX };
 
-/* 	msgpack_sbuffer_destroy(&sbuf); */
-/* 	freeq_table_unref(t); */
-/* 	freeq_table_unref(t2); */
-/* 	freeq_unref(ctx); */
-/* } */
-/* END_TEST */
+	int b;
+	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+	int fd = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode);
+
+	buffer output, input;
+	buffer_init(&output,write,fd,buf,sizeof buf);
+
+	int bytes[4];
+	for (int i = 0; i < 4; i++)
+		bytes[i] = buffer_putvarint32(&output, vals[i]);
+
+	buffer_flush(&output);
+	buffer_close(&output);
+
+	fd = open("poop.txt", O_RDONLY, mode);
+	buffer_init(&input,read,fd,buf,sizeof buf);
+
+	for (int i = 0; i < 4; i++)
+	{
+		uint32_t v;
+		struct longlong r;
+		b = buffer_getvarint(&input, &r);
+		v = r.low;
+		ck_assert_int_eq(b, bytes[i]);
+		ck_assert_int_eq(vals[i], v);
+	}
+	buffer_close(&input);
+}
+END_TEST
+
+START_TEST (test_varint_64)
+{
+
+	static const int64_t vals[] = {LONG_MIN,
+				       -0x1000000000000000,
+				       -1,
+				       0,
+				       1,
+				       0x1000000000000000,
+				       LONG_MAX
+	};
+
+	int b;
+	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+	int fd = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode);
+
+	buffer output, input;
+	buffer_init(&output,write,fd,buf,sizeof buf);
+
+	int bytes[7];
+	for (int i = 0; i < 7; i++)
+		bytes[i] = buffer_putvarintsigned(&output, vals[i]);
+
+	buffer_flush(&output);
+	buffer_close(&output);
+
+	fd = open("poop.txt", O_RDONLY, mode);
+	buffer_init(&input,read,fd,buf,sizeof buf);
+
+	for (int i = 0; i < 7; i++)
+	{
+		int64_t v;
+		result_t r;
+		b = buffer_getvarint(&input, &r.s);
+		dezigzag64(&r.s);
+		v = r.i;
+		ck_assert_int_eq(b, bytes[i]);
+		ck_assert_int_eq(vals[i], v);
+	}
+
+	buffer_close(&input);
+
+}
+END_TEST
+
+START_TEST (test_varint_u64)
+{
+	static const uint64_t vals[] = {0,
+					1,
+					0x1000000000000000,
+					ULONG_MAX
+	};
+
+	int b;
+	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+	int fd = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode);
+
+	buffer output, input;
+	buffer_init(&output,write,fd,buf,sizeof buf);
+
+	int bytes[4];
+	for (int i = 0; i < 4; i++)
+		bytes[i] = buffer_putvarint(&output, vals[i]);
+
+	buffer_flush(&output);
+	buffer_close(&output);
+
+	fd = open("poop.txt", O_RDONLY, mode);
+	buffer_init(&input,read,fd,buf,sizeof buf);
+
+	for (int i = 0; i < 4; i++)
+	{
+		uint64_t v;
+		result_t r;
+		b = buffer_getvarint(&input, &r.s);		
+		v = r.i;
+		ck_assert_int_eq(b, bytes[i]);
+		ck_assert_int_eq(vals[i], v);
+	}
+
+	buffer_close(&input);
+
+}
+END_TEST
 
 Suite *
 freeq_basic_suite (void)
@@ -326,16 +351,11 @@ freeq_basic_suite (void)
 	tcase_add_test(tc_core, test_freeq_table_new_retcode);
 	tcase_add_test(tc_core, test_freeq_table_new_ptr_nullcol);
 	tcase_add_test(tc_core, test_freeq_table_new_ptr);
-	tcase_add_loop_test (tc_core, test_varint_32, 0, 7);
-	tcase_add_loop_test (tc_core, test_varint_u32, 0, 4);
-	tcase_add_loop_test (tc_core, test_varint_64, 0, 7);
-	tcase_add_loop_test (tc_core, test_varint_u64, 0, 4);
-	tcase_add_test (tc_core, test_buffer_putvarint32);
+	tcase_add_test (tc_core, test_varint_32);
+	tcase_add_test (tc_core, test_varint_u32);
+	tcase_add_test (tc_core, test_varint_64);
+	tcase_add_test (tc_core, test_varint_u64);
 
-/*	tcase_add_test(tc_core, test_freeq_col_new_ret);
-	tcase_add_test(tc_core, test_freeq_col_new_ptr); 
-	tcase_add_test(tc_core, test_freeq_col_pack_unpack); 
-*/
 	suite_add_tcase(s, tc_core);
 	return s;
 }
