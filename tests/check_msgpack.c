@@ -12,12 +12,6 @@ const char *appname = "appname";
 const char *colnames[] = { "one", "two" };
 freeq_coltype_t coltypes[] = { FREEQ_COL_NUMBER, FREEQ_COL_STRING };
 
-START_TEST (test_dummy)
-{
-	ck_assert_int_eq(1,1);
-}
-END_TEST;
-
 
 START_TEST (test_freeq_col_pack_unpack)
 {
@@ -56,10 +50,13 @@ START_TEST (test_freeq_col_pack_unpack)
 			data_one,
 			data_two);
 
+	t->numrows = 8;
 	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 	int fd = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode);
 	fprintf(stderr, "open, writing\n");
+	freeq_set_log_priority(ctx, 10);
 	freeq_table_write(ctx, t, fd);
+	fprintf(stderr, "BACK FROM WRITE\n");
 	close(fd);
 	fprintf(stderr, "done, open for read\n");
 
@@ -144,7 +141,6 @@ freeq_basic_suite (void)
 	/*tcase_add_test(tc_core, test_freeq_col_pack_unpack_check_data);
 	tcase_add_test(tc_core, test_freeq_col_pack_something);*/
 
-	tcase_add_test(tc_core, test_dummy);
 	suite_add_tcase(s, tc_core);
 
 	return s;
