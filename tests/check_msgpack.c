@@ -21,14 +21,14 @@ START_TEST (test_freeq_col_pack_unpack)
 	GSList *data_one = NULL;
 	GSList *data_two = NULL;
 
-	data_one = g_slist_append(data_one, GINT_TO_POINTER(0xd));
-	data_one = g_slist_append(data_one, GINT_TO_POINTER(0xd + 0xe));
-	data_one = g_slist_append(data_one, GINT_TO_POINTER(0xe + 0xa));
-	data_one = g_slist_append(data_one, GINT_TO_POINTER(0xa + 0xd));
-	data_one = g_slist_append(data_one, GINT_TO_POINTER(0xd + 0xb));
-	data_one = g_slist_append(data_one, GINT_TO_POINTER(0xb + 0xe));
-	data_one = g_slist_append(data_one, GINT_TO_POINTER(0xe + 0xe));
-	data_one = g_slist_append(data_one, GINT_TO_POINTER(0xe + 0xf));
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(10));
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(20));
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(30));
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(40));
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(50));
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(60));
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(70));
+	data_one = g_slist_append(data_one, GINT_TO_POINTER(80));
 	
 	data_two = g_slist_append(data_two, "one");
 	data_two = g_slist_append(data_two, "two");
@@ -53,21 +53,18 @@ START_TEST (test_freeq_col_pack_unpack)
 	t->numrows = 8;
 	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 	int fd = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode);
-	fprintf(stderr, "open, writing\n");
 	freeq_set_log_priority(ctx, 10);
 	freeq_table_write(ctx, t, fd);
-	fprintf(stderr, "BACK FROM WRITE\n");
 	close(fd);
-	fprintf(stderr, "done, open for read\n");
 
 	fd = open("poop.txt", O_RDONLY, mode);
 	freeq_table_read(ctx, &t2, fd);
+
 	freeq_table_print(ctx, t2, stdout);
-	
-	fprintf(stderr, "done\n");
+
 	freeq_table_unref(t);
 	freeq_table_unref(t2);
-
+	
 	g_slist_free(data_one);
 	g_slist_free(data_two);
 	freeq_unref(ctx);
@@ -152,7 +149,7 @@ main (void)
 	int number_failed;
 	Suite *s = freeq_basic_suite();
 	SRunner *sr = srunner_create(s);
-	srunner_run_all(sr, CK_VERBOSE);
+	srunner_run_all(sr, CK_NOFORK);
 	number_failed = srunner_ntests_failed(sr);
 	srunner_free(sr);
 	return (number_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;

@@ -31,6 +31,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <math.h>
+#include <inttypes.h>
 
 #include <freeq/libfreeq.h>
 #include "libfreeq-private.h"
@@ -429,7 +430,7 @@ struct freeq_table **t;
 int sock;
 {
 	union {
-		uint32_t i;
+		int64_t i;
 		struct longlong s;
 	} r;
 
@@ -494,19 +495,24 @@ int sock;
 	{
 		for (int j = 0; j < numcols; j++)
 		{
+			r.i = 0;
+			if (buffer_getvarint(&buf, &(r.s)) == 0)
+			{
+				more = 0;
+				break;
+			}
 			switch (cols[j].coltype) {
 			case FREEQ_COL_STRING:
-				buffer_getvarint(&buf, &(r.s));
 				dezigzag32(&(r.s));
 				slen = r.i;
-				dbg(ctx, "%d/%d len %ld read %d\n",i,j, slen, buf.p);
+				dbg(ctx, "%d/%d len %d read %d\n",i,j, slen, buf.p);
 				if (slen > 0)
 				{
 					buffer_getn(&buf, (char *)&strbuf, slen);
 					dbg(ctx, "%d/%d string %s read %d\n", i,j,(char *)&strbuf, buf.p);
 					cols[j].data = g_slist_prepend(cols[j].data, strndup((char *)&strbuf, slen));
 				}
-				else if (r.i < 0)
+				else if (slen < 0)
 				{
 					cols[j].data = g_slist_prepend(cols[j].data, g_slist_nth_data(cols[j].data, -slen));
 					dbg(ctx, "%d/%d string %s read %d\n",i,j, cols[j].data->data, buf.p);
@@ -518,16 +524,15 @@ int sock;
 					 * should just send it once
 					 * and then send the offset */
 					dbg(ctx, "%d/%d empty string %d\n",i,j,slen);
+					cols[j].data = g_slist_prepend(cols[j].data, NULL);
 					//dbg(ctx, "string %s read %d\n", cols[j].data->data, buf.p);
 				}
 				break;
-			case FREEQ_COL_NUMBER:
-				r.i = 0;
-				buffer_getvarint(&buf, &(r.s));
-				dbg(ctx, "BEFORE DEZIG %ld\n", r.i);
+			case FREEQ_COL_NUMBER:			       
 				dezigzag64(&(r.s));
-				dbg(ctx, "%d/%d value raw %ld delta %ld read %d\n", i,j, r.i, prev[j] + r.i, buf.p);
-				cols[j].data = g_slist_prepend(cols[j].data, GINT_TO_POINTER(prev[j] + r.i));
+				dbg(ctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " read %d\n", i,j, r.i, prev[j] + r.i, buf.p);
+				prev[j] = prev[j] + r.i;
+				cols[j].data = g_slist_prepend(cols[j].data, GINT_TO_POINTER(prev[j]));
 				break;
 			case FREEQ_COL_IPV4ADDR:
 				break;
@@ -536,20 +541,13 @@ int sock;
 			default:
 				break;
 			}
-		}
-	
-		dbg(ctx, "end of row, b.p %ld b.n %ld\n", buf.p, buf.n);
-		if (buf.p >= buf.n)
-		{
-			int err = buffer_feed(&buf);
-			if (err)
-			{
-				more = 0;
-			}
-		}
-		sleep(1);
+		}	
 		i++;
 	}
+
+	for (int i = 0; i < numcols; i++)
+		cols[i].data = g_slist_reverse(cols[i].data);
+	
 	tbl->numrows = i;
 	*t = tbl;
 	return 0;
@@ -676,8 +674,6 @@ FREEQ_EXPORT void freeq_table_print(struct freeq_ctx *ctx, struct freeq_table *t
 	for (int j = 0; j < t->numcols; j++)
 		colp[j] = t->columns[j].data;
 
-	fprintf(stderr, "colp[0] = %p\n", colp[0]);
-	fprintf(stderr, "colp[1] = %p\n", colp[1]);
 	//fprintf(of, "%s\n", t->identity);
 	fprintf(of, "%s\n", t->name);
 
