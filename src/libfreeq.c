@@ -541,8 +541,9 @@ int sock;
 			default:
 				break;
 			}
-		}	
-		i++;
+		}
+		if (more)
+			i++;
 	}
 
 	for (int i = 0; i < numcols; i++)

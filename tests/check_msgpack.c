@@ -12,7 +12,6 @@ const char *appname = "appname";
 const char *colnames[] = { "one", "two" };
 freeq_coltype_t coltypes[] = { FREEQ_COL_NUMBER, FREEQ_COL_STRING };
 
-
 START_TEST (test_freeq_col_pack_unpack)
 {
 	struct freeq_ctx *ctx;
@@ -38,7 +37,7 @@ START_TEST (test_freeq_col_pack_unpack)
 	data_two = g_slist_append(data_two, "two");
 	data_two = g_slist_append(data_two, "one");
 	data_two = g_slist_append(data_two, "two");
-				  
+	
 	freeq_new(&ctx, appname, identity);
 	freeq_table_new(ctx,
 			"foo",
@@ -49,7 +48,7 @@ START_TEST (test_freeq_col_pack_unpack)
 			NULL,
 			data_one,
 			data_two);
-
+	
 	t->numrows = 8;
 	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 	int fd = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode);
@@ -61,7 +60,7 @@ START_TEST (test_freeq_col_pack_unpack)
 	freeq_table_read(ctx, &t2, fd);
 
 	freeq_table_print(ctx, t2, stdout);
-
+	fprintf(stderr, "done printing\n");
 	freeq_table_unref(t);
 	freeq_table_unref(t2);
 	
