@@ -100,10 +100,8 @@ void procnothread(const char *machineip)
                 *ruid = NULL, 
                 *rgid = NULL;        
         PROCTAB* proc = openproc(PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLSTATUS);
-
         memset(&proc_info, 0, sizeof(proc_info));
-        
-
+       
         while (readproc(proc, &proc_info) != NULL) {
                 cmds = g_slist_append(cmds, proc_info.cmd);
                 pids = g_slist_append(pids, GINT_TO_POINTER(proc_info.ppid));
@@ -125,6 +123,7 @@ void procnothread(const char *machineip)
                               12,
                               (freeq_coltype_t *)&coltypes, 
                               (const char **)&colnames, 
+                              1,
                               &tbl,
                               machineips,
                               pids,
@@ -140,18 +139,13 @@ void procnothread(const char *machineip)
                               ruid,
                               rgid);
 
-        // if (err < 0)
-        //         exit(EXIT_FAILURE);
-
-        //freeq_table_send(ctx, tbl);
-        
-        mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-        int f = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode);
+        if (err < 0)
+                exit(EXIT_FAILURE);
  
-        freeq_table_write(ctx, tbl, f);
-        close(f);
+        //freeq_table_write(ctx, tbl, f);
+        //close(f);
 
-        //freeq_table_unref(tbl);
+        freeq_table_unref(tbl);
         //closeproc(proc);        
         //freeq_unref(ctx);
 }

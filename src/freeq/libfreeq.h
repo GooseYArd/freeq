@@ -29,6 +29,11 @@ extern "C" {
 #include "msgpack.h"
 #include <glib.h>
 
+#include "openssl/bio.h"
+#include "openssl/ssl.h"
+#include "openssl/err.h"
+
+
 /*
  * freeq_ctx
  *
@@ -51,9 +56,6 @@ int freeq_get_log_priority(struct freeq_ctx *ctx);
 void freeq_set_log_priority(struct freeq_ctx *ctx, int priority);
 const char *freeq_get_identity(struct freeq_ctx *ctx);
 void freeq_set_identity(struct freeq_ctx *ctx, const char *identity);
-
-uint64_t read_varint64(int sock);
-uint8_t send_varint64(int sock, uint64_t value);
 
 /*
  * freeq_list
@@ -96,10 +98,6 @@ struct freeq_table {
 	struct freeq_column columns[];	
 };
 
-void freeq_cbuf_write(struct freeq_cbuf *b, 
-		      void *d,
-		      ssize_t len);
-
 void freeq_table_print(struct freeq_ctx *ctx,
 		       struct freeq_table *table,
 		       FILE *of);
@@ -140,7 +138,9 @@ struct freeq_table *freeq_table_unref(struct freeq_table *table);
 struct freeq_ctx *freeq_table_get_ctx(struct freeq_table *table);
 
 int freeq_table_write(struct freeq_ctx *c, struct freeq_table *table, int sock);
+int freeq_table_bio_write(struct freeq_ctx *c, struct freeq_table *table, BIO *b);
 int freeq_table_read(struct freeq_ctx *c, struct freeq_table **table, int sock);
+int freeq_table_bio_read(struct freeq_ctx *c, struct freeq_table **table, BIO *b);
 
 int freeq_table_new(struct freeq_ctx *ctx,
 		    const char *name,

@@ -12,7 +12,65 @@ const char *appname = "appname";
 const char *colnames[] = { "one", "two" };
 freeq_coltype_t coltypes[] = { FREEQ_COL_NUMBER, FREEQ_COL_STRING };
 
-START_TEST (test_freeq_col_pack_unpack)
+/* START_TEST (test_freeq_col_pack_unpack) */
+/* { */
+/* 	struct freeq_ctx *ctx; */
+/* 	struct freeq_table *t = 0, *t2 = 0; */
+	
+/* 	GSList *data_one = NULL; */
+/* 	GSList *data_two = NULL; */
+
+/* 	data_one = g_slist_append(data_one, GINT_TO_POINTER(10)); */
+/* 	data_one = g_slist_append(data_one, GINT_TO_POINTER(20)); */
+/* 	data_one = g_slist_append(data_one, GINT_TO_POINTER(30)); */
+/* 	data_one = g_slist_append(data_one, GINT_TO_POINTER(40)); */
+/* 	data_one = g_slist_append(data_one, GINT_TO_POINTER(50)); */
+/* 	data_one = g_slist_append(data_one, GINT_TO_POINTER(60)); */
+/* 	data_one = g_slist_append(data_one, GINT_TO_POINTER(70)); */
+/* 	data_one = g_slist_append(data_one, GINT_TO_POINTER(80)); */
+	
+/* 	data_two = g_slist_append(data_two, "one"); */
+/* 	data_two = g_slist_append(data_two, "two"); */
+/* 	data_two = g_slist_append(data_two, "one"); */
+/* 	data_two = g_slist_append(data_two, "two"); */
+/* 	data_two = g_slist_append(data_two, "one"); */
+/* 	data_two = g_slist_append(data_two, "two"); */
+/* 	data_two = g_slist_append(data_two, "one"); */
+/* 	data_two = g_slist_append(data_two, "two"); */
+	
+/* 	freeq_new(&ctx, appname, identity); */
+/* 	freeq_table_new(ctx, */
+/* 			"foo", */
+/* 			2, */
+/* 			(freeq_coltype_t *)&coltypes, */
+/* 			(const char **)&colnames, */
+/* 			&t, */
+/* 			NULL, */
+/* 			data_one, */
+/* 			data_two); */
+	
+/* 	t->numrows = 8; */
+/* 	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH; */
+/* 	int fd = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode); */
+/* 	freeq_set_log_priority(ctx, 10); */
+/* 	freeq_table_write(ctx, t, fd); */
+/* 	close(fd); */
+
+/* 	fd = open("poop.txt", O_RDONLY, mode); */
+/* 	freeq_table_read(ctx, &t2, fd); */
+
+/* 	freeq_table_print(ctx, t2, stdout); */
+/* 	fprintf(stderr, "done printing\n"); */
+/* 	freeq_table_unref(t); */
+/* 	freeq_table_unref(t2); */
+	
+/* 	g_slist_free(data_one); */
+/* 	g_slist_free(data_two); */
+/* 	freeq_unref(ctx); */
+/* } */
+/* END_TEST */
+
+START_TEST (test_freeq_write_read_bio)
 {
 	struct freeq_ctx *ctx;
 	struct freeq_table *t = 0, *t2 = 0;
@@ -50,14 +108,15 @@ START_TEST (test_freeq_col_pack_unpack)
 			data_two);
 	
 	t->numrows = 8;
-	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-	int fd = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode);
-	freeq_set_log_priority(ctx, 10);
-	freeq_table_write(ctx, t, fd);
-	close(fd);
+	BIO *out, *in;
+	out = BIO_new_file("poop2.txt", "w");
 
-	fd = open("poop.txt", O_RDONLY, mode);
-	freeq_table_read(ctx, &t2, fd);
+	freeq_set_log_priority(ctx, 10);
+	freeq_table_bio_write(ctx, t, out);
+	BIO_free(out);
+
+	in = BIO_new_file("poop2.txt", "r");	
+	freeq_table_bio_read(ctx, &t2, in);
 
 	freeq_table_print(ctx, t2, stdout);
 	fprintf(stderr, "done printing\n");
@@ -69,6 +128,7 @@ START_TEST (test_freeq_col_pack_unpack)
 	freeq_unref(ctx);
 }
 END_TEST
+
 
 /* START_TEST (test_freeq_col_pack_unpack_check_data) */
 /* { */
@@ -133,7 +193,8 @@ freeq_basic_suite (void)
 {
 	Suite *s = suite_create("freeq_msgpack");
 	TCase *tc_core = tcase_create("Core");
-	tcase_add_test(tc_core, test_freeq_col_pack_unpack);
+	/* tcase_add_test(tc_core, test_freeq_col_pack_unpack); */
+	tcase_add_test(tc_core, test_freeq_write_read_bio);
 	/*tcase_add_test(tc_core, test_freeq_col_pack_unpack_check_data);
 	tcase_add_test(tc_core, test_freeq_col_pack_something);*/
 

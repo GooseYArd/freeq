@@ -60,7 +60,7 @@ EXTRA_DIST = \
 # Subdirectories to descend into.
 SUBDIRS = po
 
-bin_PROGRAMS = freeqd system_monitor freeql stest
+bin_PROGRAMS = freeqd system_monitor freeql stest client
 
 lib_LTLIBRARIES = \
 	libfreeq-1.0.la
@@ -494,8 +494,9 @@ libcontrol_a_SOURCES = \
 	control/substdi.c \
 	control/substdo.c
 
-libfreeq_1_0_la_LIBADD = $(NANOMSG_LDFLAGS) $(GLIB_LIBS) libowfat.a
+libfreeq_1_0_la_LIBADD = $(NANOMSG_LDFLAGS) $(GLIB_LIBS)  -lssl -lcrypto
 
+client_SOURCES = src/client.c src/system.h
 stest_SOURCES = src/stest.c src/system.h
 freeqd_SOURCES = src/freeqd.cc src/system.h
 freeql_SOURCES = src/freeql.cc src/system.h
@@ -520,6 +521,16 @@ freeqd_LDADD = \
 	$(GLIB_LIBS) \
 	$(SQLITE4_LDFLAGS)
 
+client_LDADD = \
+	$(LIBINTL) \
+	libowfat.a \
+	$(top_builddir)/lib/libfreeq.la \
+	libcontrol.a \
+	libfreeq-1.0.la \
+	-lssl \
+	-lcrypto \
+	$(OPENSSL_LIBS)
+
 freeql_LDADD = $(LIBINTL) $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la  $(GLIB_LIBS)
 
 stest_LDADD = $(LIBINTL) libcontrol.a $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la $(GLIB_LIBS)
@@ -529,11 +540,11 @@ TESTS = check_basic check_msgpack
 check_PROGRAMS = check_basic check_msgpack
 check_basic_SOURCES = tests/check_basic.c src/varint.c $(top_builddir)/src/freeq/freeq.h
 check_basic_CFLAGS = @CHECK_CFLAGS@
-check_basic_LDADD = libfreeq-1.0.la @CHECK_LIBS@ @GLIB_LIBS@ libowfat.a
+check_basic_LDADD = libfreeq-1.0.la @CHECK_LIBS@ @GLIB_LIBS@  -lcrypto -lssl 
 
 check_msgpack_SOURCES = tests/check_msgpack.c $(top_builddir)/src/freeq/freeq.h
 check_msgpack_CFLAGS = @CHECK_CFLAGS@
-check_msgpack_LDADD = libfreeq-1.0.la @CHECK_LIBS@  @GLIB_LIBS@
+check_msgpack_LDADD = libfreeq-1.0.la @CHECK_LIBS@  @GLIB_LIBS@ -lcrypto -lssl
 
 LOG_COMPILER = $(SHELL)
 
