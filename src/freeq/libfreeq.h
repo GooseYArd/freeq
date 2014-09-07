@@ -94,6 +94,7 @@ struct freeq_table {
 	char *name;
 	int numcols;
 	bool destroy_data;
+	GStringChunk *strchunk;
 	struct freeq_table *next;
 	struct freeq_column columns[];	
 };

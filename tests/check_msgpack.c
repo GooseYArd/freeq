@@ -70,6 +70,62 @@ freeq_coltype_t coltypes[] = { FREEQ_COL_NUMBER, FREEQ_COL_STRING };
 /* } */
 /* END_TEST */
 
+bool compare_tables(struct freeq_table *t1, struct freeq_table *t2)
+{
+	fprintf(stderr, "comparing names %s and %s\n", t1->name, t2->name);
+	if (strcmp(t1->name, t2->name) != 0)
+		return false;
+
+	fprintf(stderr, "name matches\n");
+	if (t1->numcols != t2->numcols)
+		return false;
+
+	fprintf(stderr, "name and numcols match\n");
+	for (int i=0; i < t1->numcols; i++)
+	{
+		fprintf(stderr, "checking column %d\n", i);
+		if (t1->columns[i].coltype != t2->columns[i].coltype)
+		{
+			fprintf(stderr, "column type mistmach: %d != %d\n", t1->columns[i].coltype, t2->columns[i].coltype);
+			return false;
+		}
+		fprintf(stderr, "%d: type matches\n", i);
+		if (strcmp(t1->columns[i].name, t2->columns[i].name) != 0)
+			return false;		
+		fprintf(stderr, "%d: name matches\n", i);
+
+		GSList *c1 = t1->columns[i].data;
+		GSList *c2 = t2->columns[i].data;
+		while (c1 != NULL) {
+			switch (t1->columns[i].coltype) {
+			case FREEQ_COL_STRING:
+				if (strcmp(c1->data, c2->data) != 0) {
+					fprintf(stderr, "got %s should be %s\n", c1->data, c2->data);
+					return false;
+				}
+				break;
+			case FREEQ_COL_NUMBER:
+				if (c1->data != c2->data) {
+					fprintf(stderr, "got %d should be %d\n", GPOINTER_TO_INT(c1->data), GPOINTER_TO_INT(c2->data));
+					return false;
+				}
+				break;
+			default:
+				break;
+			}
+
+			c1 = g_slist_next(c1);
+			c2 = g_slist_next(c2);
+		}
+		fprintf(stderr, "%d: data matches\n", i);
+		if (c2 != NULL)
+			return false;
+		fprintf(stderr, "column %d ok\n", i);
+	}
+	fprintf(stderr, "everything matches\n");
+	return true;
+}
+
 START_TEST (test_freeq_write_read_bio)
 {
 	struct freeq_ctx *ctx;
@@ -117,9 +173,12 @@ START_TEST (test_freeq_write_read_bio)
 
 	in = BIO_new_file("poop2.txt", "r");	
 	freeq_table_bio_read(ctx, &t2, in);
+	BIO_free(in);
 
 	freeq_table_print(ctx, t2, stdout);
 	fprintf(stderr, "done printing\n");
+	ck_assert(compare_tables(t, t2));
+
 	freeq_table_unref(t);
 	freeq_table_unref(t2);
 	
