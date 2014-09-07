@@ -372,7 +372,6 @@ FREEQ_EXPORT int freeq_table_new(struct freeq_ctx *ctx,
 	va_list argp;
 	int collens[numcols];
 	struct freeq_table *t;
-	struct freeq_column *cols;
 
 	t = (struct freeq_table *)malloc(sizeof(struct freeq_table) + (numcols * sizeof(struct freeq_column)));
 
@@ -421,11 +420,7 @@ FREEQ_EXPORT int freeq_table_new_fromcols(struct freeq_ctx *ctx,
 					  struct freeq_table **table,
 					  bool destroy_data)
 {
-	va_list argp;
-	int collens[numcols];
 	struct freeq_table *t;
-	struct freeq_column *cols;
-
 	t = (struct freeq_table *)malloc(sizeof(struct freeq_table) + (numcols * sizeof(struct freeq_column)));
 	if (!t) {
 		err(ctx, "unable to allocate memory for table\n");
@@ -584,11 +579,9 @@ BIO *b;
 
 	char *identity;
 	char *name;
-	char bufalloc[4096];
 	char strbuf[1024] = {0};
 	struct freeq_table *tbl;
 	struct freeq_column *cols;
-	buffer buf;
 	ssize_t read;
 	int numcols = 0;
 	int more = 1;
