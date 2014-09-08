@@ -36,8 +36,8 @@ AC_PROG_CXX
 dnl Since we use gnulib: gl_EARLY must be called as soon as possible after
 dnl the C compiler is checked.  The others could be later, but we just
 dnl keep everything together.
-gl_EARLY
-gl_INIT
+dnl gl_EARLY
+dnl gl_INIT
 
 LT_INIT
 
@@ -71,7 +71,7 @@ PKG_CHECK_MODULES([CHECK], [check >= 0.9.4])
 #PKG_CHECK_MODULES(GLOG, libglog)
 #AC_LANG_POP([C++])
 
-AC_GNU_SOURCE
+#AC_GNU_SOURCE
 AC_CHECK_FUNCS([__secure_getenv secure_getenv])
 
 dnl GNU help2man creates man pages from --help output; in many cases, this
