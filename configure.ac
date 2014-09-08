@@ -36,8 +36,8 @@ AC_PROG_CXX
 dnl Since we use gnulib: gl_EARLY must be called as soon as possible after
 dnl the C compiler is checked.  The others could be later, but we just
 dnl keep everything together.
-dnl gl_EARLY
-dnl gl_INIT
+gl_EARLY
+gl_INIT
 
 LT_INIT
 

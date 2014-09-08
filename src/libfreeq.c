@@ -108,6 +108,163 @@ static void log_stderr(struct freeq_ctx *ctx,
 	vfprintf(stderr, format, args);
 }
 
+void
+dezigzag64(struct longlong *r)
+{
+	uint32_t low = r->low;
+	r->low = ((low >> 1) | ((r->hi & 1) << 31)) ^ - (low & 1);
+	r->hi = (r->hi >> 1) ^ - (low & 1);
+}
+
+void
+dezigzag32(struct longlong *r)
+{
+	uint32_t low = r->low;
+	r->low = (low >> 1) ^ - (low & 1);
+	r->hi = -(low >> 31);
+}
+
+
+/* This code was shamelessly stolen and adapted from beautiful C-only
+   version of protobuf by 云风 (cloudwu) , available at:
+   https://github.com/cloudwu/pbc */
+
+typedef struct {
+	char data[5];
+} varint32_buf_t;
+
+typedef struct {
+	char data[10];
+} varint_buf_t;
+
+static inline int
+encode_varint32(varint32_buf_t *b, uint32_t number)
+{
+	if (number < 0x80) {
+		b->data[0] = (uint8_t) number;
+		return 1;
+	}
+	b->data[0] = (uint8_t) (number | 0x80 );
+	if (number < 0x4000) {
+		b->data[1] = (uint8_t) (number >> 7 );
+		return 2;
+	}
+	b->data[1] = (uint8_t) ((number >> 7) | 0x80 );
+	if (number < 0x200000) {
+		b->data[2] = (uint8_t) (number >> 14);
+		return 3;
+	}
+	b->data[2] = (uint8_t) ((number >> 14) | 0x80 );
+	if (number < 0x10000000) {
+		b->data[3] = (uint8_t) (number >> 21);
+		return 4;
+	}
+	b->data[3] = (uint8_t) ((number >> 21) | 0x80 );
+	b->data[4] = (uint8_t) (number >> 28);
+	return 5;
+}
+
+static inline int
+encode_varint(varint_buf_t *b, uint64_t number)
+{
+	if ((number & 0xffffffff) == number) {
+		return encode_varint32((varint32_buf_t *)b, (uint32_t)number);
+	}
+	int i = 0;
+	do {
+		b->data[i] = (uint8_t)(number | 0x80);
+		//buffer_putbyte(b, (uint8_t)(number | 0x80));
+		number >>= 7;
+		++i;
+	} while (number >= 0x80);
+	b->data[i] = (uint8_t)number;
+	//buffer_putbyte(b, (uint8_t)number);
+	return i+1;
+}
+
+static inline int
+encode_varintsigned32(varint32_buf_t *buffer, int32_t n)
+{
+	n = (n << 1) ^ (n >> 31);
+	return encode_varint32(buffer,n);
+}
+
+static inline int
+encode_varintsigned(varint_buf_t *buffer, int64_t n)
+{
+	n = (n << 1) ^ (n >> 63);
+	return encode_varint(buffer,n);
+}
+
+int
+BIO_write_varint32(BIO *b, uint32_t number)
+{
+	varint32_buf_t buf;
+	int len = encode_varint32(&buf, number);
+	BIO_write(b, &buf, len);
+}
+
+int
+BIO_write_varint(BIO *b, uint32_t number)
+{
+	varint_buf_t buf;
+	int len = encode_varint(&buf, number);
+	BIO_write(b, &buf, len);
+}
+
+int
+BIO_write_varintsigned32(BIO *b, uint32_t number)
+{
+	varint32_buf_t buf;
+	int len = encode_varintsigned32(&buf, number);
+	BIO_write(b, &buf, len);
+}
+
+int
+BIO_write_varintsigned(BIO *b, uint32_t number)
+{
+	varint_buf_t buf;
+	int len = encode_varintsigned(&buf, number);
+	BIO_write(b, &buf, len);
+}
+
+ssize_t
+BIO_read_varint(BIO *b, struct longlong *result) {
+	char x;
+
+	if (!BIO_read(b, &x, 1))
+		return 0;
+
+	if (!(x & 0x80)) {
+		result->low = x;
+		result->hi = 0;
+		return 1;
+	}
+	uint32_t r = x & 0x7f;
+	int i;
+	for (i=1;i<4;i++) {
+		BIO_read(b, &x, 1);
+		r |= ((x&0x7f) << (7*i));
+		if (!(x & 0x80)) {
+			result->low = r;
+			result->hi = 0;
+			return i+1;
+		}
+	}
+	uint64_t lr = 0;
+	for (i=4;i<10;i++) {
+		BIO_read(b, &x, 1);
+		lr |= ((uint64_t)(x & 0x7f) << (7*(i-4)));
+		if (!(x & 0x80)) {
+			result->hi = (uint32_t)(lr >> 4);
+			result->low = r | (((uint32_t)lr & 0xf) << 28);
+			return i+1;
+		}
+	}
+	result->low = 0;
+	result->hi = 0;
+	return 10;
+}
 
 /**
  * freeq_get_identity:
@@ -436,136 +593,6 @@ FREEQ_EXPORT int freeq_table_new_fromcols(struct freeq_ctx *ctx,
 	return 0;
 }
 
-/* FREEQ_EXPORT int freeq_table_read(ctx, t, sock) */
-/* struct freeq_ctx *ctx; */
-/* struct freeq_table **t; */
-/* int sock; */
-/* { */
-/*	union { */
-/*		int64_t i; */
-/*		struct longlong s; */
-/*	} r; */
-
-/*	char *identity; */
-/*	char *name; */
-/*	char bufalloc[4096]; */
-/*	char strbuf[1024] = {0}; */
-/*	struct freeq_table *tbl; */
-/*	struct freeq_column *cols; */
-/*	buffer buf; */
-/*	int numcols = 0; */
-/*	int more = 1; */
-/*	int slen = 0; */
-
-/*	buffer_init(&buf,read,sock,bufalloc,sizeof bufalloc); */
-
-/*	buffer_getvarint(&buf, &(r.s)); */
-/*	buffer_getn(&buf, (char *)&strbuf, (ssize_t)r.i); */
-/*	name = strndup((char *)&strbuf, r.i); */
-/*	dbg(ctx, "name, read %d\n", buf.p); */
-
-/*	buffer_getvarint(&buf, &(r.s)); */
-/*	numcols = r.i; */
-/*	dbg(ctx, "cols %d read %d\n", numcols, buf.p); */
-
-/*	int64_t prev[r.i]; */
-/*	memset(prev, 0, numcols * sizeof(int64_t)); */
-
-/*	int err = freeq_table_new_fromcols(ctx, */
-/*					   name, */
-/*					   numcols, */
-/*					   &tbl, */
-/*					   true); */
-/*	if (err) */
-/*	{ */
-/*		free(identity); */
-/*		free(name); */
-/*		free(prev); */
-/*		return -ENOMEM; */
-/*	} */
-
-/*	free(name); */
-/*	cols = tbl->columns; */
-
-/*	for (int i = 0; i < numcols; i++) */
-/*	{ */
-/*		buffer_getc(&buf, (char *)&(cols[i].coltype)); */
-/*		dbg(ctx, "col %d type %s, read %d\n", i, coltypes[cols[i].coltype], buf.p); */
-/*	} */
-
-/*	for (int i = 0; i < numcols; i++) */
-/*	{ */
-/*		buffer_getvarint(&buf, &(r.s)); */
-/*		buffer_getn(&buf, (char *)&strbuf, r.i); */
-/*		cols[i].name = strndup((char *)&strbuf, r.i); */
-/*		dbg(ctx, "col %d name %s, read %d\n", i, cols[i].name, buf.p); */
-/*	} */
-
-/*	int i = 0; */
-/*	/\* you know you're done when the buffer is < buflen dumbass *\/ */
-/*	while (more) */
-/*	{ */
-/*		for (int j = 0; j < numcols; j++) */
-/*		{ */
-/*			r.i = 0; */
-/*			if (buffer_getvarint(&buf, &(r.s)) == 0) */
-/*			{ */
-/*				more = 0; */
-/*				break; */
-/*			} */
-/*			switch (cols[j].coltype) { */
-/*			case FREEQ_COL_STRING: */
-/*				dezigzag32(&(r.s)); */
-/*				slen = r.i; */
-/*				dbg(ctx, "%d/%d len %d read %d\n",i,j, slen, buf.p); */
-/*				if (slen > 0) */
-/*				{ */
-/*					buffer_getn(&buf, (char *)&strbuf, slen); */
-/*					dbg(ctx, "%d/%d string %s read %d\n", i,j,(char *)&strbuf, buf.p); */
-/*					cols[j].data = g_slist_prepend(cols[j].data, strndup((char *)&strbuf, slen)); */
-/*				} */
-/*				else if (slen < 0) */
-/*				{ */
-/*					cols[j].data = g_slist_prepend(cols[j].data, g_slist_nth_data(cols[j].data, -slen)); */
-/*					dbg(ctx, "%d/%d string %s read %d\n",i,j, cols[j].data->data, buf.p); */
-/*				} */
-/*				else */
-/*				{ */
-/*					/\* we shouldn't do this, if we */
-/*					 * have an empty string we */
-/*					 * should just send it once */
-/*					 * and then send the offset *\/ */
-/*					dbg(ctx, "%d/%d empty string %d\n",i,j,slen); */
-/*					cols[j].data = g_slist_prepend(cols[j].data, NULL); */
-/*					//dbg(ctx, "string %s read %d\n", cols[j].data->data, buf.p); */
-/*				} */
-/*				break; */
-/*			case FREEQ_COL_NUMBER:				*/
-/*				dezigzag64(&(r.s)); */
-/*				dbg(ctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " read %d\n", i,j, r.i, prev[j] + r.i, buf.p); */
-/*				prev[j] = prev[j] + r.i; */
-/*				cols[j].data = g_slist_prepend(cols[j].data, GINT_TO_POINTER(prev[j])); */
-/*				break; */
-/*			case FREEQ_COL_IPV4ADDR: */
-/*				break; */
-/*			case FREEQ_COL_TIME: */
-/*				break; */
-/*			default: */
-/*				break; */
-/*			} */
-/*		} */
-/*		if (more) */
-/*			i++; */
-/*	} */
-
-/*	for (int i = 0; i < numcols; i++) */
-/*		cols[i].data = g_slist_reverse(cols[i].data); */
-
-/*	tbl->numrows = i; */
-/*	*t = tbl; */
-/*	return 0; */
-/* } */
-
 FREEQ_EXPORT int freeq_table_bio_read(ctx, t, b)
 struct freeq_ctx *ctx;
 struct freeq_table **t;
@@ -701,275 +728,6 @@ BIO *b;
 	tbl->numrows = i;
 	*t = tbl;
 	return 0;
-}
-
-/* FREEQ_EXPORT int freeq_table_write(ctx, t, sock) */
-/* struct freeq_ctx *ctx; */
-/* struct freeq_table *t; */
-/* int sock; */
-/* { */
-/*	int i = 0; */
-/*	int c = t->numcols; */
-/*	unsigned int b = 0; */
-/*	gchar *val; */
-/*	int slen = 0; */
-
-/*	// use a union here */
-/*	GHashTable *strtbls[t->numcols]; */
-/*	uint64_t prev[t->numcols]; */
-/*	memset(prev, t->numcols, 0); */
-/*	GSList *colnxt[t->numcols]; */
-
-/*	char bufalloc[4096]; */
-/*	buffer buf; */
-/*	buffer_init(b,write,sock,bufalloc,sizeof bufalloc); */
-
-/*	slen = strlen(t->name); */
-/*	buffer_putvarint32(b, slen); */
-/*	dbg(ctx, "len %d write %d\n", slen, buf.p); */
-/*	buffer_put(b, (const char *)t->name, slen); */
-/*	dbg(ctx, "string %s write %d\n", t->name, buf.p); */
-
-/*	buffer_putvarint32(b, c); */
-/*	dbg(ctx, "cols %d write %d\n", c, buf.p); */
-
-/*	for (i=0; i < c; i++) { */
-/*		buffer_put(b, (char *)&(t->columns[i].coltype), sizeof(freeq_coltype_t)); */
-/*		dbg(ctx, "col %d type %s, write %d\n", i, coltypes[t->columns[i].coltype], buf.p); */
-/*	} */
-
-/*	for (i=0; i < c; i++) */
-/*	{ */
-/*		slen = strlen(t->columns[i].name); */
-/*		buffer_putvarint32(b, slen); */
-/*		buffer_put(b, (const char *)t->columns[i].name, slen); */
-/*		dbg(ctx, "col %d name %s, write %d\n", i, t->columns[i].name, buf.p); */
-/*	} */
-
-/*	for (i=0; i < c; i++) */
-/*	{ */
-/*		if (t->columns[i].coltype == FREEQ_COL_STRING) */
-/*			strtbls[i] = g_hash_table_new_full(g_str_hash, */
-/*							   g_str_equal, */
-/*							   NULL, */
-/*							   NULL); */
-/*		colnxt[i] = t->columns[i].data; */
-/*	} */
-
-/*	for (i = 0; i < t->numrows; i++) { */
-/*		for (int j = 0; j < c; j++) */
-/*		{ */
-/*			uint64_t num = 0; */
-/*			switch (t->columns[j].coltype) */
-/*			{ */
-/*			case FREEQ_COL_STRING: */
-/*				val = colnxt[j]->data; */
-/*				slen = strlen(val); */
-/*				if ((val == NULL) || (slen == 0)) { */
-/*					buffer_putbyte(b, 0); */
-/*					dbg(ctx, "%d/%d string empty\n", i,j); */
-/*					break; */
-/*				} */
-/*				gpointer elem = g_hash_table_lookup(strtbls[j], val); */
-/*				if (elem == NULL) */
-/*				{ */
-/*					g_hash_table_insert(strtbls[j], val, GINT_TO_POINTER(i)); */
-/*					buffer_putvarintsigned32(b, slen); */
-/*					dbg(ctx, "%d/%d len %d write %d\n", i,j,slen,buf.p); */
-/*					buffer_put(b, val, slen); */
-/*					dbg(ctx, "%d/%d string %s len %d write %d\n",i,j,val,slen,buf.p); */
-/*				} */
-/*				else */
-/*				{ */
-/*					unsigned int idx = GPOINTER_TO_INT(elem); */
-/*					slen = idx - i; */
-/*					buffer_putvarintsigned32(b, slen); */
-/*					g_hash_table_replace(strtbls[j], val, GINT_TO_POINTER(i)); */
-/*					dbg(ctx, "%d/%d len %d write %d\n",i,j,slen,buf.p); */
-/*				} */
-/*				break; */
-/*			case FREEQ_COL_NUMBER: */
-/*				num = GPOINTER_TO_INT(colnxt[j]->data); */
-/*				buffer_putvarintsigned(b, (int64_t)num - prev[j]); */
-/*				prev[j] = num; */
-/*				dbg(ctx, "%d/%d value raw %ld delta %ld write %d\n",i,j,num, num-prev[j], buf.p); */
-/*				break; */
-/*			case FREEQ_COL_IPV4ADDR: */
-/*				break; */
-/*			case FREEQ_COL_TIME: */
-/*				break; */
-/*			default: */
-/*				//dbg(ctx, "coltype %d not yet implemented\n", col->coltype); */
-/*				break; */
-/*			} */
-/*			colnxt[j] = g_slist_next(colnxt[j]); */
-/*		} */
-/*	} */
-/*	dbg(ctx, "done, %d bytes\n", buf.p); */
-
-/* //	for (i = 0; i < c; i++) */
-/* //		if (strtbls[i] != NULL) */
-/* //			g_hash_table_destroy(strtbls[i]); */
-
-/*	dbg(ctx, "flushing buffer\n", buf.p); */
-/*	buffer_flush(b); */
-/* } */
-
-/* This code was shamelessly stolen and adapted from beautiful C-only
-   version of protobuf by 云风 (cloudwu) , available at:
-   https://github.com/cloudwu/pbc */
-
-typedef struct {
-	char data[5];
-} varint32_buf_t;
-
-typedef struct {
-	char data[10];
-} varint_buf_t;
-
-static inline int
-encode_varint32(varint32_buf_t *b, uint32_t number)
-{
-	if (number < 0x80) {
-		b->data[0] = (uint8_t) number;
-		return 1;
-	}
-	b->data[0] = (uint8_t) (number | 0x80 );
-	if (number < 0x4000) {
-		b->data[1] = (uint8_t) (number >> 7 );
-		return 2;
-	}
-	b->data[1] = (uint8_t) ((number >> 7) | 0x80 );
-	if (number < 0x200000) {
-		b->data[2] = (uint8_t) (number >> 14);
-		return 3;
-	}
-	b->data[2] = (uint8_t) ((number >> 14) | 0x80 );
-	if (number < 0x10000000) {
-		b->data[3] = (uint8_t) (number >> 21);
-		return 4;
-	}
-	b->data[3] = (uint8_t) ((number >> 21) | 0x80 );
-	b->data[4] = (uint8_t) (number >> 28);
-	return 5;
-}
-
-static inline int
-encode_varint(varint_buf_t *b, uint64_t number)
-{
-	if ((number & 0xffffffff) == number) {
-		return encode_varint32((varint32_buf_t *)b, (uint32_t)number);
-	}
-	int i = 0;
-	do {
-		b->data[i] = (uint8_t)(number | 0x80);
-		//buffer_putbyte(b, (uint8_t)(number | 0x80));
-		number >>= 7;
-		++i;
-	} while (number >= 0x80);
-	b->data[i] = (uint8_t)number;
-	//buffer_putbyte(b, (uint8_t)number);
-	return i+1;
-}
-
-static inline int
-encode_varintsigned32(varint32_buf_t *buffer, int32_t n)
-{
-	n = (n << 1) ^ (n >> 31);
-	return encode_varint32(buffer,n);
-}
-
-static inline int
-encode_varintsigned(varint_buf_t *buffer, int64_t n)
-{
-	n = (n << 1) ^ (n >> 63);
-	return encode_varint(buffer,n);
-}
-
-int
-BIO_write_varint32(BIO *b, uint32_t number)
-{
-	varint32_buf_t buf;
-	int len = encode_varint32(&buf, number);
-	BIO_write(b, &buf, len);
-}
-
-int
-BIO_write_varint(BIO *b, uint32_t number)
-{
-	varint_buf_t buf;
-	int len = encode_varint(&buf, number);
-	BIO_write(b, &buf, len);
-}
-
-int
-BIO_write_varintsigned32(BIO *b, uint32_t number)
-{
-	varint32_buf_t buf;
-	int len = encode_varintsigned32(&buf, number);
-	BIO_write(b, &buf, len);
-}
-
-int
-BIO_write_varintsigned(BIO *b, uint32_t number)
-{
-	varint_buf_t buf;
-	int len = encode_varintsigned(&buf, number);
-	BIO_write(b, &buf, len);
-}
-
-ssize_t
-BIO_read_varint(BIO *b, struct longlong *result) {
-	char x;
-
-	if (!BIO_read(b, &x, 1))
-		return 0;
-
-	if (!(x & 0x80)) {
-		result->low = x;
-		result->hi = 0;
-		return 1;
-	}
-	uint32_t r = x & 0x7f;
-	int i;
-	for (i=1;i<4;i++) {
-		BIO_read(b, &x, 1);
-		r |= ((x&0x7f) << (7*i));
-		if (!(x & 0x80)) {
-			result->low = r;
-			result->hi = 0;
-			return i+1;
-		}
-	}
-	uint64_t lr = 0;
-	for (i=4;i<10;i++) {
-		BIO_read(b, &x, 1);
-		lr |= ((uint64_t)(x & 0x7f) << (7*(i-4)));
-		if (!(x & 0x80)) {
-			result->hi = (uint32_t)(lr >> 4);
-			result->low = r | (((uint32_t)lr & 0xf) << 28);
-			return i+1;
-		}
-	}
-	result->low = 0;
-	result->hi = 0;
-	return 10;
-}
-
-void
-dezigzag64(struct longlong *r)
-{
-	uint32_t low = r->low;
-	r->low = ((low >> 1) | ((r->hi & 1) << 31)) ^ - (low & 1);
-	r->hi = (r->hi >> 1) ^ - (low & 1);
-}
-
-void
-dezigzag32(struct longlong *r)
-{
-	uint32_t low = r->low;
-	r->low = (low >> 1) ^ - (low & 1);
-	r->hi = -(low >> 31);
 }
 
 

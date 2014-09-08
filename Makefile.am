@@ -27,6 +27,7 @@ AM_CPPFLAGS = \
 	-DLIBEXECDIR=\""$(libexecdir)"\" \
 	-I${top_srcdir}/src/freeq \
 	-I${top_srcdir}/src \
+	-I${top_srcdir}/lib \
 	-I/usr/include/glib-2.0 \
 	-I/usr/lib/x86_64-linux-gnu/glib-2.0/include \
 	$(SQLITE4_CFLAGS) \
@@ -157,7 +158,7 @@ noinst_LTLIBRARIES =
 BUILT_SOURCES = 
 CLEANFILES =
 
-#include $(top_srcdir)/lib/local.mk
+include $(top_srcdir)/lib/local.mk
 
 # Verify that all source files using _() are listed in po/POTFILES.in.
 # The idea is to run this before making pretests, as well as official
