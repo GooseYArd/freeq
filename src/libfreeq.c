@@ -40,7 +40,6 @@
 #include <nanomsg/pipeline.h>
 
 #include "varint.h"
-#include "libowfat/buffer.h"
 
 #include "openssl/bio.h"
 #include "openssl/ssl.h"

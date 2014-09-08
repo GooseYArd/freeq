@@ -71,7 +71,7 @@ PKG_CHECK_MODULES([CHECK], [check >= 0.9.4])
 #PKG_CHECK_MODULES(GLOG, libglog)
 #AC_LANG_POP([C++])
 
-#AC_GNU_SOURCE
+AC_GNU_SOURCE
 AC_CHECK_FUNCS([__secure_getenv secure_getenv])
 
 dnl GNU help2man creates man pages from --help output; in many cases, this

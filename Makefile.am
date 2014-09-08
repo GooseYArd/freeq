@@ -25,8 +25,6 @@ AM_CPPFLAGS = \
 	-include $(top_builddir)/config.h \
 	-DSYSCONFDIR=\""$(sysconfdir)"\" \
 	-DLIBEXECDIR=\""$(libexecdir)"\" \
-	-I${top_srcdir}/gnulib \
-	-I${top_srcdir}/gnulib/lib \
 	-I${top_srcdir}/src/freeq \
 	-I${top_srcdir}/src \
 	-I/usr/include/glib-2.0 \
