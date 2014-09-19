@@ -142,6 +142,8 @@ void procnothread(const char *machineip)
         if (err < 0)
                 exit(EXIT_FAILURE);
  
+        freeq_table_sendto_ssl(ctx, tbl);
+
         //freeq_table_write(ctx, tbl, f);
         //close(f);
 

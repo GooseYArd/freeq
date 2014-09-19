@@ -40,7 +40,7 @@
 #include <nanomsg/pipeline.h>
 
 #include "varint.h"
-
+#include "ssl-common.h"
 #include "openssl/bio.h"
 #include "openssl/ssl.h"
 #include "openssl/err.h"
@@ -58,6 +58,18 @@ int BIO_write_varintsigned32(BIO *b, uint32_t number);
 int BIO_write_varint32(BIO *b, uint32_t number);
 int BIO_write_varintsigned(BIO *b, uint32_t number);
 ssize_t BIO_read_varint(BIO *b, struct longlong *result);
+unsigned int bio_wrap(struct freeq_ctx *ctx, struct freeq_table *tbl, SSL *ssl);
+
+static bool ssl_initialized;
+struct CRYPTO_dynlock_value
+{
+    pthread_mutex_t mutex;
+};
+
+static pthread_mutex_t *mutex_buf = NULL;
+DH *dh512 = NULL;
+DH *dh1024 = NULL;
+
 
 /**
  * SECTION:libfreeq
@@ -79,8 +91,8 @@ struct freeq_ctx {
 		       const char *format, va_list args);
 	void* userdata;
 	const char *identity;
-	const char* url;
 	const char* appname;
+	SSL_CTX *sslctx;
 	int log_priority;
 };
 
@@ -313,6 +325,130 @@ static int log_priority(const char *priority)
 	return 0;
 }
 
+void init_dhparams(void) {
+    BIO *bio;
+    bio = BIO_new_file("control/dh512.pem", "r");
+    if (!bio)
+        int_error("Error opening file dh512.pem");
+    dh512 = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
+    if (!dh512)
+        int_error("Error reading DH parameters from dh512.pem");
+    BIO_free(bio);
+    bio = BIO_new_file("control/dh1024.pem", "r");
+    if (!bio)
+        int_error("Error opening file dh1024.pem");
+    dh1024 = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
+    if (!dh1024)
+        int_error("Error reading DH parameters from dh1024.pem");
+    BIO_free(bio);
+}
+DH *tmp_dh_callback(SSL *ssl, int is_export, int keylength)
+{
+    DH *ret;
+    if (!dh512 || !dh1024)
+        init_dhparams();
+
+    switch (keylength) {
+    case 512:
+        ret = dh512;
+        break;
+    case 1024:
+    default:
+        ret = dh1024;
+        break;
+    }
+    return ret;
+}
+
+static struct CRYPTO_dynlock_value * dyn_create_function(const char *file,
+                                                         int line)
+{
+    struct CRYPTO_dynlock_value *value;
+    value = (struct CRYPTO_dynlock_value *)malloc(sizeof(struct CRYPTO_dynlock_value));
+    if (!value)
+        return NULL;
+
+    pthread_mutex_init(&(value->mutex), NULL);
+    return value;
+}
+static void dyn_lock_function(int mode, 
+                              struct CRYPTO_dynlock_value *l,
+                              const char *file, 
+                              int line)
+{
+    if (mode & CRYPTO_LOCK)
+        pthread_mutex_lock(&(l->mutex));
+    else
+        pthread_mutex_unlock(&(l->mutex));
+}
+static void dyn_destroy_function(struct CRYPTO_dynlock_value *l,
+                                 const char *file, int line)
+{
+    pthread_mutex_destroy(&(l->mutex));
+    free(l);
+}
+
+SSL_CTX *setup_client_ctx(void)
+{
+    SSL_CTX *ctx;
+ 
+    ctx = SSL_CTX_new(SSLv23_method(  ));
+    if (SSL_CTX_load_verify_locations(ctx, CAFILE, CADIR) != 1)
+        int_error("Error loading CA file and/or directory");
+    if (SSL_CTX_set_default_verify_paths(ctx) != 1)
+        int_error("Error loading default CA file and/or directory");
+    if (SSL_CTX_use_certificate_chain_file(ctx, CERTFILE) != 1)
+        int_error("Error loading certificate from file");
+    if (SSL_CTX_use_PrivateKey_file(ctx, CERTFILE, SSL_FILETYPE_PEM) != 1)
+        int_error("Error loading private key from file");
+    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, verify_callback);
+    SSL_CTX_set_verify_depth(ctx, 4);
+    SSL_CTX_set_options(ctx, SSL_OP_ALL|SSL_OP_NO_SSLv2);
+    if (SSL_CTX_set_cipher_list(ctx, CIPHER_LIST) != 1)
+        int_error("Error setting cipher list (no valid ciphers)");
+    return ctx;
+}
+
+static void locking_function(int mode, int n, const char * file, int line)
+{
+    if (mode & CRYPTO_LOCK)
+        pthread_mutex_lock(&(mutex_buf[n]));
+    else
+        pthread_mutex_unlock(&(mutex_buf[n]));
+}
+
+static unsigned long id_function(void)
+{
+    return ((unsigned long)pthread_self());
+}
+
+int freeq_init_ssl(struct freeq_ctx *ctx) 
+{
+	if (ssl_initialized)
+		return true;
+	
+	int i;
+	mutex_buf = (pthread_mutex_t *)malloc(CRYPTO_num_locks() *sizeof(pthread_mutex_t));
+	if (!mutex_buf)
+		exit(1);
+	
+	for (i = 0; i < CRYPTO_num_locks(); i++)
+		pthread_mutex_init(&(mutex_buf[i]), NULL) ;
+	
+	CRYPTO_set_id_callback(id_function);
+	CRYPTO_set_locking_callback(locking_function);
+	CRYPTO_set_dynlock_create_callback(dyn_create_function);
+	CRYPTO_set_dynlock_lock_callback(dyn_lock_function);
+	CRYPTO_set_dynlock_destroy_callback(dyn_destroy_function);
+	
+	SSL_library_init();
+	SSL_load_error_strings();    
+	seed_prng();		
+	ctx->sslctx = setup_client_ctx();
+	ssl_initialized = true;	
+	return 0;
+}
+
 /**
  * freeq_new:
  *
@@ -348,6 +484,10 @@ FREEQ_EXPORT int freeq_new(struct freeq_ctx **ctx, const char *appname, const ch
 		identity = secure_getenv("HOSTNAME");
 
 	freeq_set_identity(c, identity ? identity : "unknown");
+
+
+
+
 
 	info(c, "ctx %p created\n", c);
 	//dbg(c, "log_priority=%d\n", c->log_priority);
@@ -730,6 +870,58 @@ BIO *b;
 	return 0;
 }
 
+unsigned int bio_wrap(struct freeq_ctx *ctx, struct freeq_table *tbl, SSL *ssl)
+{
+	BIO  *buf_io, *ssl_bio;		
+
+	buf_io = BIO_new(BIO_f_buffer());
+	ssl_bio = BIO_new(BIO_f_ssl());
+	BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE);
+	BIO_push(buf_io, ssl_bio);
+	
+	return freeq_table_bio_write(ctx, tbl, buf_io);       	
+}
+
+FREEQ_EXPORT int freeq_table_sendto_ssl(struct freeq_ctx *freeqctx, struct freeq_table *t)
+{
+	BIO     *conn;
+	SSL     *ssl;	
+	long    err;
+	const char *server = "localhost";
+
+	if (freeq_init_ssl(freeqctx))
+		exit(1);
+			
+	conn = BIO_new_connect("localhost:13000");
+	if (!conn)
+		int_error("Error creating connection BIO") ;
+    
+	if (BIO_do_connect(conn) <= 0)
+		int_error("Error connecting to remote machine");
+	
+	ssl = SSL_new(freeqctx->sslctx);
+	SSL_set_bio(ssl, conn, conn);
+	if (SSL_connect(ssl) <= 0)
+		int_error("Error connecting SSL object");
+	if ((err = post_connection_check(ssl, server)) != X509_V_OK)
+	{
+		fprintf(stderr, "-Error: peer certificate: %s\n",
+			X509_verify_cert_error_string(err));
+		int_error("Error checking SSL object after connection");
+	}
+	fprintf(stderr, "SSL Connection opened\n");
+	if (bio_wrap(freeqctx, t, ssl))
+		SSL_shutdown(ssl);
+	else
+		SSL_clear(ssl);
+	fprintf(stderr, "SSL Connection closed\n");
+	
+	SSL_free(ssl);
+
+	//SSL_CTX_free(sslctx);
+	return 0;
+	
+}
 
 FREEQ_EXPORT int freeq_table_bio_write(ctx, t, b)
 struct freeq_ctx *ctx;
@@ -871,3 +1063,139 @@ FREEQ_EXPORT void freeq_table_print(struct freeq_ctx *ctx, struct freeq_table *t
 		}
 	}
 }
+
+FREEQ_EXPORT void handle_error(const char *file, int lineno, const char *msg)
+{
+    fprintf(stderr, "** %s:%i %s\n", file, lineno, msg);
+    ERR_print_errors_fp(stderr);
+    //exit(-1);
+}
+
+FREEQ_EXPORT int verify_callback(int ok, X509_STORE_CTX *store)
+{
+    char data[256];
+ 
+    if (!ok)
+    {
+        X509 *cert = X509_STORE_CTX_get_current_cert(store);
+        int  depth = X509_STORE_CTX_get_error_depth(store);
+        int  err = X509_STORE_CTX_get_error(store);
+ 
+        fprintf(stderr, "-Error with certificate at depth: %i\n", depth);
+        X509_NAME_oneline(X509_get_issuer_name(cert), data, 256);
+        fprintf(stderr, "  issuer   = %s\n", data);
+        X509_NAME_oneline(X509_get_subject_name(cert), data, 256);
+        fprintf(stderr, "  subject  = %s\n", data);
+        fprintf(stderr, "  err %i:%s\n", err, X509_verify_cert_error_string(err));
+    }
+ 
+    return ok;
+}
+
+FREEQ_EXPORT long post_connection_check(SSL *ssl, const char *host)
+{
+    X509      *cert;
+    X509_NAME *subj;
+    char      data[256];
+    int       extcount;
+    int       ok = 0;
+ 
+    /* Checking the return from SSL_get_peer_certificate here is not strictly
+     * necessary.  With our example programs, it is not possible for it to return
+     * NULL.  However, it is good form to check the return since it can return NULL
+     * if the examples are modified to enable anonymous ciphers or for the server
+     * to not require a client certificate.
+     */
+    if (!(cert = SSL_get_peer_certificate(ssl)) || !host)
+        goto err_occured;
+    if ((extcount = X509_get_ext_count(cert)) > 0)
+    {
+        int i;
+ 
+        for (i = 0;  i < extcount;  i++)
+        {
+            char              *extstr;
+            X509_EXTENSION    *ext;
+ 
+            ext = X509_get_ext(cert, i);
+            extstr = (char*) OBJ_nid2sn(OBJ_obj2nid(X509_EXTENSION_get_object(ext)));
+ 
+            if (!strcmp(extstr, "subjectAltName"))
+            {
+                int                  j;
+                unsigned char        *data;
+                STACK_OF(CONF_VALUE) *val;
+                CONF_VALUE           *nval;
+                void                 *ext_str = NULL;
+                const X509V3_EXT_METHOD    *meth = X509V3_EXT_get(ext);
+                if (!meth)
+                    break;
+                data = ext->value->data;
+
+#if (OPENSSL_VERSION_NUMBER > 0x00907000L)
+                if (meth->it)
+                    ext_str = ASN1_item_d2i(NULL, (const unsigned char **)&data, ext->value->length,
+                                            ASN1_ITEM_ptr(meth->it));
+                else
+                    ext_str = meth->d2i(NULL, (const unsigned char **)&data, ext->value->length);
+#else
+                ext_str = meth->d2i(NULL, &data, ext->value->length);
+#endif
+                val = meth->i2v(meth, ext_str, NULL);
+                for (j = 0;  j < sk_CONF_VALUE_num(val);  j++)
+                {
+                    nval = sk_CONF_VALUE_value(val, j);
+                    if (!strcmp(nval->name, "DNS") && !strcmp(nval->value, host))
+                    {
+                        ok = 1;
+                        break;
+                    }
+                }
+            }
+            if (ok)
+                break;
+        }
+    }
+ 
+    if (!ok && (subj = X509_get_subject_name(cert)) &&
+        X509_NAME_get_text_by_NID(subj, NID_commonName, data, 256) > 0)
+    {
+        data[255] = 0;
+        if (strcasecmp(data, host) != 0)
+            goto err_occured;
+    }
+ 
+    X509_free(cert);
+    return SSL_get_verify_result(ssl);
+ 
+err_occured:
+    if (cert)
+        X509_free(cert);
+    return X509_V_ERR_APPLICATION_VERIFICATION;
+}
+
+FREEQ_EXPORT void seed_prng(void)
+{
+    RAND_load_file("/dev/urandom", 1024);
+}
+
+void showcerts(SSL* ssl)
+{   X509 *cert;
+    char *line;
+
+    cert = SSL_get_peer_certificate(ssl);	/* Get certificates (if available) */
+    if ( cert != NULL )
+    {
+        printf("Server certificates:\n");
+        line = X509_NAME_oneline(X509_get_subject_name(cert), 0, 0);
+        printf("Subject: %s\n", line);
+        free(line);
+        line = X509_NAME_oneline(X509_get_issuer_name(cert), 0, 0);
+        printf("Issuer: %s\n", line);
+        free(line);
+        X509_free(cert);
+    }
+    else
+        printf("No certificates.\n");
+}
+

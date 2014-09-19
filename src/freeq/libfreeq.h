@@ -142,6 +142,7 @@ int freeq_table_write(struct freeq_ctx *c, struct freeq_table *table, int sock);
 int freeq_table_bio_write(struct freeq_ctx *c, struct freeq_table *table, BIO *b);
 int freeq_table_read(struct freeq_ctx *c, struct freeq_table **table, int sock);
 int freeq_table_bio_read(struct freeq_ctx *c, struct freeq_table **table, BIO *b);
+int freeq_table_sendto_ssl(struct freeq_ctx *freeqctx, struct freeq_table *t);
 
 int freeq_table_new(struct freeq_ctx *ctx,
 		    const char *name,

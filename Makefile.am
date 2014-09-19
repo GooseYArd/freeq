@@ -57,7 +57,7 @@ EXTRA_DIST = \
 # Subdirectories to descend into.
 SUBDIRS = po
 
-bin_PROGRAMS = freeqd system_monitor freeql stest client
+bin_PROGRAMS = freeqd system_monitor freeql stest client ssl_server ssl_client
 
 lib_LTLIBRARIES = \
 	libfreeq-1.0.la
@@ -99,8 +99,10 @@ libcontrol_a_SOURCES = \
 libfreeq_1_0_la_LIBADD = $(NANOMSG_LDFLAGS) $(GLIB_LIBS)  -lssl -lcrypto
 
 client_SOURCES = src/client.c src/system.h
+ssl_server_SOURCES = src/ssl_server.c src/system.h
+ssl_client_SOURCES = src/ssl_client.c src/system.h
 stest_SOURCES = src/stest.c src/system.h
-freeqd_SOURCES = src/freeqd.cc src/system.h
+freeqd_SOURCES = src/freeqd.c src/system.h
 freeql_SOURCES = src/freeql.cc src/system.h
 system_monitor_SOURCES = src/system_monitor.c src/system.h
 
@@ -119,9 +121,31 @@ freeqd_LDADD = \
 	libfreeq-1.0.la \
 	$(NANOMSG_LDFLAGS) \
 	$(GLIB_LIBS) \
-	$(SQLITE4_LDFLAGS)
+	$(SQLITE4_LDFLAGS) \
+	-lssl \
+	-lcrypto \
+	$(OPENSSL_LIBS)
 
 client_LDADD = \
+	$(LIBINTL) \
+	$(top_builddir)/lib/libfreeq.la \
+	libcontrol.a \
+	libfreeq-1.0.la \
+	-lssl \
+	-lcrypto \
+	$(OPENSSL_LIBS)
+
+
+ssl_server_LDADD = \
+	$(LIBINTL) \
+	$(top_builddir)/lib/libfreeq.la \
+	libcontrol.a \
+	libfreeq-1.0.la \
+	-lssl \
+	-lcrypto \
+	$(OPENSSL_LIBS)
+
+ssl_client_LDADD = \
 	$(LIBINTL) \
 	$(top_builddir)/lib/libfreeq.la \
 	libcontrol.a \
