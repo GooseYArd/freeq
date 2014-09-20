@@ -85,6 +85,7 @@ void procnothread(const char *machineip)
                 exit(EXIT_FAILURE);
 
         freeq_set_identity(ctx, machineip);
+	freeq_set_log_priority(ctx, 10);
 
         GSList *machineips = NULL, 
                 *cmds = NULL, 
@@ -117,7 +118,7 @@ void procnothread(const char *machineip)
                 rgid = g_slist_append(rgid, GINT_TO_POINTER(proc_info.rgid));
                 machineips = g_slist_append(machineips, "1.2.3.4");
         }
-
+        
         err = freeq_table_new(ctx, 
                               "procnothread", 
                               12,
@@ -143,13 +144,9 @@ void procnothread(const char *machineip)
                 exit(EXIT_FAILURE);
  
         freeq_table_sendto_ssl(ctx, tbl);
-
-        //freeq_table_write(ctx, tbl, f);
-        //close(f);
-
         freeq_table_unref(tbl);
-        //closeproc(proc);        
-        //freeq_unref(ctx);
+        closeproc(proc);
+        freeq_unref(ctx);
 }
 
 int publisher (const char *url, const char *agent, const char *node_name)

@@ -57,16 +57,15 @@ EXTRA_DIST = \
 # Subdirectories to descend into.
 SUBDIRS = po
 
-bin_PROGRAMS = freeqd system_monitor freeql stest client ssl_server ssl_client
+bin_PROGRAMS = freeqd system_monitor freeql
 
 lib_LTLIBRARIES = \
 	libfreeq-1.0.la
 
 libfreeq_1_0_la_SOURCES = \
-	src/libfreeq.c \
-	src/varint.c
+	src/libfreeq.c
 
-noinst_LIBRARIES = libcontrol.a 
+noinst_LIBRARIES = libcontrol.a
 
 libcontrol_a_SOURCES = \
 	control/qsutil.c \
@@ -101,7 +100,6 @@ libfreeq_1_0_la_LIBADD = $(NANOMSG_LDFLAGS) $(GLIB_LIBS)  -lssl -lcrypto
 client_SOURCES = src/client.c src/system.h
 ssl_server_SOURCES = src/ssl_server.c src/system.h
 ssl_client_SOURCES = src/ssl_client.c src/system.h
-stest_SOURCES = src/stest.c src/system.h
 freeqd_SOURCES = src/freeqd.c src/system.h
 freeql_SOURCES = src/freeql.cc src/system.h
 system_monitor_SOURCES = src/system_monitor.c src/system.h
@@ -156,18 +154,16 @@ ssl_client_LDADD = \
 
 freeql_LDADD = $(LIBINTL) $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la  $(GLIB_LIBS)
 
-stest_LDADD = $(LIBINTL) libcontrol.a $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la $(GLIB_LIBS)
-
 TESTS = check_basic check_msgpack
 
 check_PROGRAMS = check_basic check_msgpack
-check_basic_SOURCES = tests/check_basic.c src/varint.c $(top_builddir)/src/freeq/freeq.h
+check_basic_SOURCES = tests/check_basic.c src/libfreeq.c src/freeq/freeq.h
 check_basic_CFLAGS = @CHECK_CFLAGS@
-check_basic_LDADD = libfreeq-1.0.la @CHECK_LIBS@ @GLIB_LIBS@  -lcrypto -lssl 
+check_basic_LDADD = @CHECK_LIBS@ @GLIB_LIBS@  -lcrypto -lssl 
 
-check_msgpack_SOURCES = tests/check_msgpack.c $(top_builddir)/src/freeq/freeq.h
+check_msgpack_SOURCES = tests/check_msgpack.c src/libfreeq.c src/freeq/freeq.h
 check_msgpack_CFLAGS = @CHECK_CFLAGS@
-check_msgpack_LDADD = libfreeq-1.0.la @CHECK_LIBS@  @GLIB_LIBS@ -lcrypto -lssl
+check_msgpack_LDADD = @CHECK_LIBS@  @GLIB_LIBS@ -lcrypto -lssl
 
 LOG_COMPILER = $(SHELL)
 

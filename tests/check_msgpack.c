@@ -10,7 +10,7 @@ const char *identity = "identity";
 const char *appname = "appname";
 
 const char *colnames[] = { "one", "two" };
-freeq_coltype_t coltypes[] = { FREEQ_COL_NUMBER, FREEQ_COL_STRING };
+freeq_coltype_t test_coltypes[] = { FREEQ_COL_NUMBER, FREEQ_COL_STRING };
 
 /* START_TEST (test_freeq_col_pack_unpack) */
 /* { */
@@ -42,7 +42,7 @@ freeq_coltype_t coltypes[] = { FREEQ_COL_NUMBER, FREEQ_COL_STRING };
 /* 	freeq_table_new(ctx, */
 /* 			"foo", */
 /* 			2, */
-/* 			(freeq_coltype_t *)&coltypes, */
+/* 			(freeq_coltype_t *)&test_coltypes, */
 /* 			(const char **)&colnames, */
 /* 			&t, */
 /* 			NULL, */
@@ -156,7 +156,7 @@ START_TEST (test_freeq_write_read_bio)
 	freeq_table_new(ctx,
 			"foo",
 			2,
-			(freeq_coltype_t *)&coltypes,
+			(freeq_coltype_t *)&test_coltypes,
 			(const char **)&colnames,
 			&t,
 			NULL,

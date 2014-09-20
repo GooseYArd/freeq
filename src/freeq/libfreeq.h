@@ -47,6 +47,16 @@ struct freeq_ctx *freeq_unref(struct freeq_ctx *ctx);
 struct freeq_table_header *freeq_table_header_unref(struct freeq_ctx *ctx, struct freeq_table_header *header);
 struct freeq_cbuf;
 
+typedef struct freeq_generation_t freeq_generation_t;
+struct freeq_generation_t
+{
+	unsigned int refcount;
+	GHashTable *tables;
+	time_t era;
+	GRWLock *rw_lock;
+	freeq_generation_t *next;
+};
+
 int freeq_new(struct freeq_ctx **ctx, const char *appname, const char *identity);
 void freeq_set_log_fn(struct freeq_ctx *ctx,
 		  void (*log_fn)(struct freeq_ctx *ctx,
@@ -56,7 +66,7 @@ int freeq_get_log_priority(struct freeq_ctx *ctx);
 void freeq_set_log_priority(struct freeq_ctx *ctx, int priority);
 const char *freeq_get_identity(struct freeq_ctx *ctx);
 void freeq_set_identity(struct freeq_ctx *ctx, const char *identity);
-
+int freeq_generation_new(freeq_generation_t *gen);
 /*
  * freeq_list
  *
@@ -95,6 +105,7 @@ struct freeq_table {
 	int numcols;
 	bool destroy_data;
 	GStringChunk *strchunk;
+	GRWLock *rw_lock;
 	struct freeq_table *next;
 	struct freeq_column columns[];	
 };
@@ -142,6 +153,7 @@ int freeq_table_write(struct freeq_ctx *c, struct freeq_table *table, int sock);
 int freeq_table_bio_write(struct freeq_ctx *c, struct freeq_table *table, BIO *b);
 int freeq_table_read(struct freeq_ctx *c, struct freeq_table **table, int sock);
 int freeq_table_bio_read(struct freeq_ctx *c, struct freeq_table **table, BIO *b);
+int freeq_table_ssl_read(struct freeq_ctx *ctx, struct freeq_table **tbl, SSL *ssl);
 int freeq_table_sendto_ssl(struct freeq_ctx *freeqctx, struct freeq_table *t);
 
 int freeq_table_new(struct freeq_ctx *ctx,

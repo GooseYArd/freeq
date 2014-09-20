@@ -1,22 +1,16 @@
 #include <check.h>
 #include <stdlib.h>
 #include <unistd.h>
-
 #include <stdint.h>
-#include "src/freeq/libfreeq.h"
 #include <string.h>
-//#include "src/libfreeq-private.h"
-#include "src/varint.h"
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include "buffer.h"
+#include "src/freeq/libfreeq.h"
+#include "libfreeq-private.h"
 
 const char *identity = "identity";
 const char *appname = "appname";
 const char *colnames[] = { "one", "two" };
-freeq_coltype_t coltypes[] = { 1, 2 };
+freeq_coltype_t test_coltypes[] = { 1, 2 };
 
 char buf[4096];
 typedef union {
@@ -106,7 +100,7 @@ START_TEST (test_freeq_table_new_retcode)
 	v = freeq_table_new(ctx,
 			    "foo",
 			    2,
-			    (freeq_coltype_t *)&coltypes,
+			    (freeq_coltype_t *)&test_coltypes,
 			    (const char **)&colnames,
 			    &t,
 			    true,
@@ -127,7 +121,7 @@ START_TEST (test_freeq_table_new_ptr_nullcol)
 	freeq_table_new(ctx,
 			"foo",
 			2,
-			(freeq_coltype_t *)&coltypes,
+			(freeq_coltype_t *)&test_coltypes,
 			(const char **)&colnames,
 			&t,
 			false,
@@ -154,7 +148,7 @@ START_TEST (test_freeq_table_new_ptr)
 	freeq_table_new(ctx,
 			"foo",
 			2,
-			(freeq_coltype_t *)&coltypes,
+			(freeq_coltype_t *)&test_coltypes,
 			(const char **)&colnames,
 			&t,
 			true,
@@ -180,36 +174,27 @@ START_TEST (test_varint_32)
 				   0x10000000,
 				   INT_MAX
 	};
-
 	int b;
-	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-	int fd = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode);
-
-	buffer output, input;
-	buffer_init(&output,write,fd,buf,sizeof buf);
+     	BIO *bio = BIO_new(BIO_s_mem());
 
 	int bytes[7];
 	for (int i = 0; i < 7; i++)
-		bytes[i] = buffer_putvarintsigned32(&output, vals[i]);
-
-	buffer_flush(&output);
-	buffer_close(&output);
-
-	fd = open("poop.txt", O_RDONLY, mode);
-	buffer_init(&input,read,fd,buf,sizeof buf);
+		bytes[i] = BIO_write_varintsigned32(bio, vals[i]);
 
 	for (int i = 0; i < 7; i++)
 	{
 		int32_t v;
 		struct longlong r;
-		b = buffer_getvarint(&input, &r);
+		b = BIO_read_varint(bio, &r);
 		dezigzag32(&r);
 		v = r.low;
 		ck_assert_int_eq(b, bytes[i]);
 		ck_assert_int_eq(vals[i], v);
 	}
 
-	buffer_close(&input);
+	BIO_set_close(bio, BIO_CLOSE);
+	BIO_free(bio);
+
 }
 END_TEST
 
@@ -220,40 +205,31 @@ START_TEST (test_varint_u32)
 					 1,
 					 0x10000000,
 					 UINT_MAX };
-
 	int b;
-	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-	int fd = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode);
-
-	buffer output, input;
-	buffer_init(&output,write,fd,buf,sizeof buf);
+	BIO *bio = BIO_new(BIO_s_mem());
 
 	int bytes[4];
 	for (int i = 0; i < 4; i++)
-		bytes[i] = buffer_putvarint32(&output, vals[i]);
-
-	buffer_flush(&output);
-	buffer_close(&output);
-
-	fd = open("poop.txt", O_RDONLY, mode);
-	buffer_init(&input,read,fd,buf,sizeof buf);
+		bytes[i] = BIO_write_varint32(bio, vals[i]);
 
 	for (int i = 0; i < 4; i++)
 	{
 		uint32_t v;
 		struct longlong r;
-		b = buffer_getvarint(&input, &r);
+		b = BIO_read_varint(bio, &r);
 		v = r.low;
 		ck_assert_int_eq(b, bytes[i]);
 		ck_assert_int_eq(vals[i], v);
 	}
-	buffer_close(&input);
+
+	BIO_set_close(bio, BIO_CLOSE);
+	BIO_free(bio);
+
 }
 END_TEST
 
 START_TEST (test_varint_64)
 {
-
 	static const int64_t vals[] = {LONG_MIN,
 				       -0x1000000000000000,
 				       -1,
@@ -264,34 +240,26 @@ START_TEST (test_varint_64)
 	};
 
 	int b;
-	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-	int fd = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode);
-
-	buffer output, input;
-	buffer_init(&output,write,fd,buf,sizeof buf);
+	BIO *bio = BIO_new(BIO_s_mem());
 
 	int bytes[7];
 	for (int i = 0; i < 7; i++)
-		bytes[i] = buffer_putvarintsigned(&output, vals[i]);
-
-	buffer_flush(&output);
-	buffer_close(&output);
-
-	fd = open("poop.txt", O_RDONLY, mode);
-	buffer_init(&input,read,fd,buf,sizeof buf);
+		bytes[i] = BIO_write_varintsigned(bio, vals[i]);
 
 	for (int i = 0; i < 7; i++)
 	{
 		int64_t v;
 		result_t r;
-		b = buffer_getvarint(&input, &r.s);
+		b = BIO_read_varint(bio, &r.s);
 		dezigzag64(&r.s);
 		v = r.i;
+		fprintf(stderr, "LENGTH at %d GOT %d\n", i, b);
 		ck_assert_int_eq(b, bytes[i]);
 		ck_assert_int_eq(vals[i], v);
 	}
 
-	buffer_close(&input);
+	BIO_set_close(bio, BIO_CLOSE);
+	BIO_free(bio);
 
 }
 END_TEST
@@ -305,33 +273,24 @@ START_TEST (test_varint_u64)
 	};
 
 	int b;
-	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-	int fd = open("poop.txt", O_WRONLY | O_CREAT | O_TRUNC, mode);
-
-	buffer output, input;
-	buffer_init(&output,write,fd,buf,sizeof buf);
+	BIO *bio = BIO_new(BIO_s_mem());
 
 	int bytes[4];
 	for (int i = 0; i < 4; i++)
-		bytes[i] = buffer_putvarint(&output, vals[i]);
-
-	buffer_flush(&output);
-	buffer_close(&output);
-
-	fd = open("poop.txt", O_RDONLY, mode);
-	buffer_init(&input,read,fd,buf,sizeof buf);
+		bytes[i] = BIO_write_varint(bio, vals[i]);
 
 	for (int i = 0; i < 4; i++)
 	{
 		uint64_t v;
 		result_t r;
-		b = buffer_getvarint(&input, &r.s);		
+		b = BIO_read_varint(bio, &r.s);		
 		v = r.i;
 		ck_assert_int_eq(b, bytes[i]);
 		ck_assert_int_eq(vals[i], v);
 	}
 
-	buffer_close(&input);
+	BIO_set_close(bio, BIO_CLOSE);
+	BIO_free(bio);
 
 }
 END_TEST

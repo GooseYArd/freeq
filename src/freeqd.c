@@ -6,25 +6,24 @@
 #include <string.h>
 #include <time.h>
 #include <stdio.h>
+
+#include <signal.h>
+#include <stdbool.h>
+
+#include "sqlite4.h"
+#include "freeq/libfreeq.h"
+#include "libfreeq-private.h"
+
 #include <nanomsg/nn.h>
 #include <nanomsg/pipeline.h>
 #include <nanomsg/tcp.h>
 #include <nanomsg/survey.h>
-
-#include <signal.h>
-#include "sqlite4.h"
-#include <stdbool.h>
-
-#include "freeq/libfreeq.h"
-#include "libfreeq-private.h"
 
 /* control */
 #include "control/stralloc.h"
 #include "control/constmap.h"
 #include "control/control.h"
 #include "control/qsutil.h"
-
-#include <signal.h>
 
 #define SERVER_PORT 13000
 #define ERROR 1
@@ -53,9 +52,9 @@ sqlite4 *pDb;
 struct conn_ctx {
 	sqlite4 *pDb;
 	SSL *ssl;
+	struct freeq_ctx *freeqctx;
+	freeq_generation_t *generation;
 };
-
-typedef struct freeq_generation_t freeq_generation_t;
 
 struct CRYPTO_dynlock_value
 {
@@ -134,30 +133,83 @@ void handle_table(struct freeq_ctx *ctx, SSL *ssl)
 	BIO  *buf_io, *ssl_bio;
 	//char rbuf[1024];
 	//char wbuf[1024];
-		
+	
 	buf_io = BIO_new(BIO_f_buffer());         /* create a buffer BIO */
 	ssl_bio = BIO_new(BIO_f_ssl());           /* create an ssl BIO */
 	BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE);     /* assign the ssl BIO to SSL */
 	BIO_push(buf_io, ssl_bio);                /* add ssl_bio to buf_io */                     
 	
-	//ret = BIO_puts(buf_io, wbuf);         
+	/* ret = BIO_puts(buf_io, wbuf); */
 	/* Write contents of wbuf[] into buf_io */
-	//ret = BIO_write(buf_io, wbuf, wlen);        
+	/* ret = BIO_write(buf_io, wbuf, wlen); */
 	/* Write wlen-byte contents of wbuf[] into buf_io */
 	
-	//ret = BIO_gets(buf_io, rbuf, READBUF_SIZE);  
+	/* ret = BIO_gets(buf_io, rbuf, READBUF_SIZE);  */
 	/* Read data from buf_io and store in rbuf[] */
-	//ret = BIO_read(buf_io, rbuf, rlen);            
+	/* ret = BIO_read(buf_io, rbuf, rlen);            */
 	/* Read rlen-byte data from buf_io and store rbuf[] */
+}
+
+int generation_table_merge(struct freeq_ctx *ctx, freeq_generation_t *gen, SSL *ssl)
+{	
+	struct freeq_table *tbl;	
+	const char *tname = "fake";
+	
+	if (g_hash_table_contains(gen->tables, tname))
+	{
+	}
+	
+	if (freeq_table_ssl_read(ctx, &tbl, ssl))
+	{
+	}
+}
+
+int bio_peername(BIO *bio, char **hostname)
+{
+	int sock_fd;
+	if (BIO_get_fd(bio, &sock_fd) == -1)
+	{
+		fprintf(stderr, "Uninitialized socket passed to worker");
+		return 1;
+	}
+
+	printf("socket fd: %i\n", sock_fd);
+	struct sockaddr addr;
+	socklen_t addr_len;
+	
+	char *hn = malloc(sizeof(char) * 80);
+	if (!hostname)
+	{
+		fprintf(stderr, "Out of memory\n");		
+		return 1;
+	}
+
+	addr_len = sizeof(addr); 	
+	getpeername(sock_fd, &addr, &addr_len);
+	if (addr.sa_family == AF_INET)
+		inet_ntop(AF_INET, 
+			  &((struct sockaddr_in *)&addr)->sin_addr,
+			  hn, 40);
+	else if (addr.sa_family == AF_INET6)
+		inet_ntop(AF_INET6, 
+			  &((struct sockaddr_in6 *)&addr)->sin6_addr,
+			  hn, 40);
+	else
+	{
+		fprintf(stderr, "Unknown socket type passed to worker(): %i\n",
+			addr.sa_family);
+	}
+
+	*hostname = hn;
+	return 0;
 }
 
 void* conn_handler(void *arg)
 {
+	long err;
 	struct conn_ctx *ctx = (struct conn_ctx *)arg;
 	SSL *ssl = ctx->ssl;
-
 	pthread_detach(pthread_self());
-	long err;
 	
 	if (SSL_accept(ssl) <= 0)
 	{
@@ -172,11 +224,13 @@ void* conn_handler(void *arg)
 		int_error("Error checking SSL object after connection");
 	}
 	
-	fprintf(stderr, "SSL Connection opened\n");
-	if (0)
+	fprintf(stderr, "SSL Connection opened\n");	
+	if (generation_table_merge(ctx->freeqctx, ctx->generation, ssl))
 		SSL_shutdown(ssl);
 	else
 		SSL_clear(ssl);
+
+
 	
 	fprintf(stderr, "SSL Connection closed\n");
 	SSL_free(ssl);
@@ -239,14 +293,6 @@ static void dyn_destroy_function(struct CRYPTO_dynlock_value *l,
     pthread_mutex_destroy(&(l->mutex));
     free(l);
 }
-
-
-struct freeq_generation_t
-{
-	GHashTable *tables;
-	time_t era;
-	freeq_generation_t *next;
-};
 
 const char *freeq_sqlite_typexpr[] = {
 	"NULL",
@@ -898,6 +944,14 @@ main (int argc, char *argv[])
 	dbg(freeqctx, "starting monitor thread\n");
 	pthread_create(&t_monitor, 0, &monitor, pDb);
 
+	freeq_generation_t *current;
+	
+	if (freeq_generation_new(current))
+	{
+		dbg(freeqctx, "unable to allocate generation\n");
+		exit(EXIT_FAILURE);
+	}
+	
 	dbg(freeqctx, "readling clients file\n");	
 	if (control_readfile(&clients,(char *)"control/clients",1) != 1)
 	{
@@ -970,20 +1024,26 @@ main (int argc, char *argv[])
 		int_error("Error binding server socket");
 	
 	for (;;)
-	{
+	{		
 		dbg(freeqctx, "waiting for connection\n");
 		if (BIO_do_accept(acc) <= 0)
 			int_error("Error accepting connection");
 		dbg(freeqctx, "accepted connection, setting up ssl\n");
+
+		/*bio_peername(acc);*/
+		
 		client = BIO_pop(acc);
 		if (!(ssl = SSL_new(sslctx)))
 			int_error("Error creating SSL context");
 		dbg(freeqctx, "session creation, setting bio\n");
 		SSL_set_bio(ssl, client, client);
+
 		dbg(freeqctx, "spawning thread\n");
 		struct conn_ctx *ctx = malloc(sizeof(struct conn_ctx));
 		ctx->ssl = ssl;
 		ctx->pDb = pDb;
+		ctx->generation = current;
+		ctx->freeqctx = freeqctx;
 		pthread_create(&tid, 0, &conn_handler, ctx);
 	}
 	

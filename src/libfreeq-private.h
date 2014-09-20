@@ -68,6 +68,27 @@ void freeq_log(struct freeq_ctx *ctx,
            const char *format, ...)
            __attribute__((format(printf, 6, 7)));
 
+struct longlong {
+	uint32_t low;
+	uint32_t hi;
+};
+
+void
+dezigzag64(struct longlong *r);
+void
+dezigzag32(struct longlong *r);
+
+int
+BIO_write_varint32(BIO *b, uint32_t number);
+int
+BIO_write_varint(BIO *b, uint64_t number);
+int
+BIO_write_varintsigned32(BIO *b, uint32_t number);
+int
+BIO_write_varintsigned(BIO *b, int64_t number);
+ssize_t
+BIO_read_varint(BIO *b, struct longlong *result);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
