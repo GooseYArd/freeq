@@ -16,6 +16,9 @@
   You should have received a copy of the GNU Lesser General Public
   License along with this library; if not, write to the Free Software
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+
+  I dedicate this program to my long time friend Art Taylor
+
 */
 
 #include "config.h"
@@ -92,9 +95,17 @@ typedef struct {
 	char vibuf32[5];
 } vibuf_t;
 
+void destroy_sender_table(gpointer data) {
+	GHashTable *senders = (GHashTable*)data;
+	g_hash_table_destroy(senders);
+}
+
 FREEQ_EXPORT int freeq_generation_new(freeq_generation_t *gen)
 {
-	gen->tables = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, NULL);
+	gen->tables = g_hash_table_new_full(g_str_hash, 
+					    g_str_equal, 
+					    g_free, 
+					    (GDestroyNotify)destroy_sender_table);
 	g_rw_lock_init(gen->rw_lock);
 	gen->refcount = 1;
 	return 0;
@@ -493,11 +504,6 @@ FREEQ_EXPORT int freeq_new(struct freeq_ctx **ctx, const char *appname, const ch
 		identity = secure_getenv("HOSTNAME");
 
 	freeq_set_identity(c, identity ? identity : "unknown");
-
-
-
-
-
 	info(c, "ctx %p created\n", c);
 	//dbg(c, "log_priority=%d\n", c->log_priority);
 	*ctx = c;
@@ -690,7 +696,8 @@ FREEQ_EXPORT int freeq_table_new(struct freeq_ctx *ctx,
 	t->refcount = 1;
 	t->numrows = 0;
 	t->ctx = ctx;
-
+	t->strchunk = g_string_chunk_new(8);
+	
 	dbg(ctx, "going to allocate columns...\n");
 	va_start(argp, destroy_data);
 
@@ -751,51 +758,19 @@ BIO *b;
 		int64_t i;
 		struct longlong s;
 	} r;
-
+	
 	char *identity;
 	char *name;
 	char strbuf[1024] = {0};
+	unsigned int numcols;
 	unsigned int rb = 0;
-
-	rb += BIO_read_varint(b, &(r.s));
-	rb += BIO_read(b, (char *)&strbuf, (ssize_t)r.i);
-	name = strndup((char *)&strbuf, r.i);
-	dbg(ctx, "name %s read %d\n", name, rb);
-
-	rb += BIO_read_varint(b, &(r.s));
-	rb += BIO_read(b, (char *)&strbuf, (ssize_t)r.i);
-	identity = strndup((char *)&strbuf, r.i);
-	dbg(ctx, "identity %s read %d\n", identity, rb);
-
-}
-
-
-FREEQ_EXPORT int freeq_table_bio_read(ctx, t, b)
-struct freeq_ctx *ctx;
-struct freeq_table **t;
-BIO *b;
-{
-	union {
-		int64_t i;
-		struct longlong s;
-	} r;
-
-	char *identity;
-	char *name;
-	char strbuf[1024] = {0};
 	struct freeq_table *tbl;
-	struct freeq_column *cols;
-	ssize_t read;
-	int numcols = 0;
-	int more = 1;
-	int slen = 0;
-	unsigned int rb = 0;
-
+	
 	rb += BIO_read_varint(b, &(r.s));
 	rb += BIO_read(b, (char *)&strbuf, (ssize_t)r.i);
 	name = strndup((char *)&strbuf, r.i);
 	dbg(ctx, "name %s read %d\n", name, rb);
-
+	
 	rb += BIO_read_varint(b, &(r.s));
 	rb += BIO_read(b, (char *)&strbuf, (ssize_t)r.i);
 	identity = strndup((char *)&strbuf, r.i);
@@ -804,10 +779,7 @@ BIO *b;
 	rb += BIO_read_varint(b, &(r.s));
 	numcols = r.i;
 	dbg(ctx, "numcols %d read %d\n", numcols, rb);
-
-	int64_t prev[r.i];
-	memset(prev, 0, numcols * sizeof(int64_t));
-
+	
 	int err = freeq_table_new_fromcols(ctx,
 					   name,
 					   numcols,
@@ -815,37 +787,49 @@ BIO *b;
 					   true);
 	if (err)
 	{
+		dbg(ctx, "freeq_table_new_fromcols failed!\n");
 		free(identity);
 		free(name);
-		free(prev);
 		return -ENOMEM;
 	}
-
+	tbl->identity = identity;
 	free(name);
-	cols = tbl->columns;
+	*t = tbl;
+	return 0;
+}
 
-	for (int i = 0; i < numcols; i++)
+FREEQ_EXPORT int freeq_table_bio_read_tabledata(ctx, tbl, b)
+struct freeq_ctx *ctx;
+struct freeq_table *tbl;
+BIO *b;
+{
+	union {
+		int64_t i;
+		struct longlong s;
+	} r;
+
+	char strbuf[1024] = {0};
+	ssize_t read;
+	int numcols = 0;
+	int more = 1;
+	int slen = 0;
+	unsigned int rb = 0;
+
+	GSList **coldata = calloc(sizeof(GSList *), tbl->numcols);
+	if (coldata == NULL)
 	{
-		rb += BIO_read(b, (char *)&(cols[i].coltype), 1);
+		dbg(ctx, "unable to allocate coldata lists\n");
+		return -ENOMEM;
 	}
-
-	tbl->strchunk = g_string_chunk_new(8);
-
-	dbg(ctx, "coltypes, read %d\n", rb);
-
-	for (int i = 0; i < numcols; i++)
-	{
-		rb += BIO_read_varint(b, &(r.s));
-		rb += BIO_read(b, (char *)&strbuf, r.i);
-		cols[i].name = strndup((char *)&strbuf, r.i);
-	}
-	dbg(ctx, "colnames, read %d\n", rb);
+	
+	int64_t prev[tbl->numcols];
+	memset(prev, 0, tbl->numcols * sizeof(int64_t));
 
 	int i = 0;
 	/* you know you're done when the buffer is < buflen dumbass */
 	while (more)
 	{
-		for (int j = 0; j < numcols; j++)
+		for (int j = 0; j < tbl->numcols; j++)
 		{
 			r.i = 0;
 			read = BIO_read_varint(b, &(r.s));
@@ -855,7 +839,7 @@ BIO *b;
 				break;
 			}
 			rb += read;
-			switch (cols[j].coltype) {
+			switch (tbl->columns[j].coltype) {
 			case FREEQ_COL_STRING:
 				dezigzag32(&(r.s));
 				slen = r.i;
@@ -864,13 +848,12 @@ BIO *b;
 				{
 					rb += BIO_read(b, (char *)&strbuf, slen);
 					strbuf[slen] = 0;
-					//cols[j].data = g_slist_prepend(cols[j].data, strndup((char *)&strbuf, slen));
-					cols[j].data = g_slist_prepend(cols[j].data, g_string_chunk_insert_const(tbl->strchunk, (char *)&strbuf));
+					coldata[j] = g_slist_prepend(coldata[j], g_string_chunk_insert_const(tbl->strchunk, (char *)&strbuf));
 				}
 				else if (slen < 0)
 				{
-					dbg(ctx, "negative offset %d list length is %d, value at offset is %s\n", slen, g_slist_length(cols[j].data), g_slist_nth_data(cols[j].data, -slen -1));
-					cols[j].data = g_slist_prepend(cols[j].data, g_slist_nth_data(cols[j].data, -slen -1));
+					dbg(ctx, "negative offset %d list length is %d, value at offset is %s\n", slen, g_slist_length(coldata[j]), g_slist_nth_data(coldata[j], -slen -1));
+					coldata[j] = g_slist_prepend(coldata[j], g_slist_nth_data(coldata[j], -slen -1));
 				}
 				else
 				{
@@ -879,17 +862,17 @@ BIO *b;
 					 * should just send it once
 					 * and then send the offset */
 					dbg(ctx, "%d/%d empty string %d\n",i,j,slen);
-					cols[j].data = g_slist_prepend(cols[j].data, NULL);
-					//dbg(ctx, "string %s read %d\n", cols[j].data->data, buf.p);
+					coldata[j] = g_slist_prepend(coldata[j], NULL);
+					//dbg(ctx, "string %s read %d\n", coldata[j]->data, buf.p);
 				}
-				dbg(ctx, "%d/%d val %s\n",i,j, cols[j].data->data);
+				dbg(ctx, "%d/%d val %s\n",i,j, coldata[j]->data);
 				break;
 			case FREEQ_COL_NUMBER:
 				dezigzag64(&(r.s));
 				dbg(ctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " read %d\n", i,j, r.i, prev[j] + r.i, rb);
 				prev[j] = prev[j] + r.i;
-				cols[j].data = g_slist_prepend(cols[j].data, GINT_TO_POINTER(prev[j]));
-				dbg(ctx, "%d/%d val %d\n",i,j, cols[j].data->data);
+				coldata[j] = g_slist_prepend(coldata[j], GINT_TO_POINTER(prev[j]));
+				dbg(ctx, "%d/%d val %d\n",i,j, coldata[j]->data);
 				break;
 			case FREEQ_COL_IPV4ADDR:
 				break;
@@ -903,45 +886,14 @@ BIO *b;
 			i++;
 	}
 
-	for (int i = 0; i < numcols; i++)
-		cols[i].data = g_slist_reverse(cols[i].data);
-
+	for (int i = 0; i < tbl->numcols; i++)
+		tbl->columns[i].data = g_slist_concat(tbl->columns[i].data, 
+						      g_slist_reverse(coldata[i]));
+	
 	dbg(ctx, "READ %d rows\n", i);
 	tbl->numrows = i;
-	*t = tbl;
 	return 0;
 }
-
-FREEQ_EXPORT int freeq_table_ssl_read(struct freeq_ctx *ctx, struct freeq_table **tbl, SSL *ssl)
-{
-	BIO  *buf_io, *ssl_bio;
-	buf_io = BIO_new(BIO_f_buffer());
-	ssl_bio = BIO_new(BIO_f_ssl());
-	BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE);
-	BIO_push(buf_io, ssl_bio);
-	return freeq_table_bio_read(ctx, tbl, buf_io);
-}
-
-FREEQ_EXPORT int freeq_table_ssl_read_header(struct freeq_ctx *ctx, struct freeq_table **tbl, SSL *ssl)
-{
-	BIO  *buf_io, *ssl_bio;
-	buf_io = BIO_new(BIO_f_buffer());
-	ssl_bio = BIO_new(BIO_f_ssl());
-	BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE);
-	BIO_push(buf_io, ssl_bio);
-	return freeq_table_bio_read_header(ctx, tbl, buf_io);
-}
-
-unsigned int freeq_table_ssl_write(struct freeq_ctx *ctx, struct freeq_table *tbl, SSL *ssl)
-{
-	BIO  *buf_io, *ssl_bio;
-	buf_io = BIO_new(BIO_f_buffer());
-	ssl_bio = BIO_new(BIO_f_ssl());
-	BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE);
-	BIO_push(buf_io, ssl_bio);
-	return freeq_table_bio_write(ctx, tbl, buf_io);
-}
-
 
 FREEQ_EXPORT int freeq_table_sendto_ssl(struct freeq_ctx *freeqctx, struct freeq_table *t)
 {
@@ -971,12 +923,18 @@ FREEQ_EXPORT int freeq_table_sendto_ssl(struct freeq_ctx *freeqctx, struct freeq
 		int_error("Error checking SSL object after connection");
 	}
 
+	BIO  *buf_io, *ssl_bio;
+	buf_io = BIO_new(BIO_f_buffer());
+	ssl_bio = BIO_new(BIO_f_ssl());
+	BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE);
+	BIO_push(buf_io, ssl_bio);
+
 	dbg(freeqctx, "ssl connection established\n");
 
 	/* because we SSL_free below there's no point in calling
 	   SSL_clear here however it might make sense to cache these
 	   objects when we're publishing more than one table */
-	if (freeq_table_ssl_write(freeqctx, t, ssl))
+	if (freeq_table_bio_write(freeqctx, t, buf_io))
 	{
 		dbg(freeqctx, "bio_wrap returned zero\n");
 		SSL_clear(ssl);
@@ -991,7 +949,6 @@ FREEQ_EXPORT int freeq_table_sendto_ssl(struct freeq_ctx *freeqctx, struct freeq
 	SSL_free(ssl);
 	//SSL_CTX_free(sslctx);
 	return 0;
-
 }
 
 FREEQ_EXPORT int freeq_table_bio_write(ctx, t, b)

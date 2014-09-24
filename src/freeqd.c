@@ -150,18 +150,66 @@ void handle_table(struct freeq_ctx *ctx, SSL *ssl)
 	/* Read rlen-byte data from buf_io and store rbuf[] */
 }
 
-int generation_table_merge(struct freeq_ctx *ctx, freeq_generation_t *gen, SSL *ssl)
+void g_hash_destroy_freeq_table(gpointer data) {
+	struct freeq_table *tbl = (struct freeq_table *)data;
+	freeq_table_unref(tbl);
+}
+
+int generation_table_merge(struct freeq_ctx *ctx, freeq_generation_t *gen, BIO *bio)
 {	
-	struct freeq_table *tbl;	
-	const char *tname = "fake";
+	struct freeq_table *header;	
+	struct freeq_table *tbl;
+	int err;
 	
-	if (g_hash_table_contains(gen->tables, tname))
-	{
+	err = freeq_table_bio_read_header(ctx, &header, bio);
+	if (err) {
+		dbg(ctx, "unable to read table header!");
+		return err;
 	}
 	
-	if (freeq_table_ssl_read(ctx, &tbl, ssl))
+	if (g_hash_table_contains(gen->tables, header->name))
 	{
+		tbl = (struct freeq_table *)g_hash_table_lookup(gen->tables, header->name);
+		if (g_hash_table_contains(tbl->senders, header->identity))
+		{
+			dbg(ctx, "this generation already contains this table\n");
+			return 1;
+		} 
+		else
+		{
+			dbg(ctx, "sender not in generation, reading the rest of it");
+			err = freeq_table_bio_read_tabledata(ctx, tbl, bio);
+			if (err)
+			{
+				dbg(ctx, "unable to read tabledata\n");
+				return err;
+			}
+		}
+	} else {
+		GHashTable* hash = g_hash_table_new_full(g_str_hash, 
+							 g_str_equal,
+							 g_free,
+							 (GDestroyNotify)g_hash_destroy_freeq_table);
+		if (hash == NULL) {
+			err(ctx, "free a bunch of stuff and return\n");
+			freeq_table_unref(header);
+			return 1;
+		}
+
+		dbg(ctx, "table not in generation, reading it\n");
+		err = freeq_table_bio_read_tabledata(ctx, header, bio);
+		if (err)
+		{
+			dbg(ctx, "unable to read tabledata\n");
+			freeq_table_unref(header);
+			return err;
+		}
+		dbg(ctx, "read table successfully, adding new table to senders\n");
+		g_hash_table_insert(hash, header->identity, header);
+		dbg(ctx, "success, adding table\n");
+		g_hash_table_insert(gen->tables, header->name, hash);
 	}
+	
 }
 
 int bio_peername(BIO *bio, char **hostname)
@@ -223,14 +271,18 @@ void* conn_handler(void *arg)
 			X509_verify_cert_error_string(err));
 		int_error("Error checking SSL object after connection");
 	}
+
+	BIO  *buf_io, *ssl_bio;
+	buf_io = BIO_new(BIO_f_buffer());
+	ssl_bio = BIO_new(BIO_f_ssl());
+	BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE);
+	BIO_push(buf_io, ssl_bio);
 	
 	fprintf(stderr, "SSL Connection opened\n");	
-	if (generation_table_merge(ctx->freeqctx, ctx->generation, ssl))
+	if (generation_table_merge(ctx->freeqctx, ctx->generation, buf_io))
 		SSL_shutdown(ssl);
 	else
 		SSL_clear(ssl);
-
-
 	
 	fprintf(stderr, "SSL Connection closed\n");
 	SSL_free(ssl);
@@ -1037,7 +1089,6 @@ main (int argc, char *argv[])
 			int_error("Error creating SSL context");
 		dbg(freeqctx, "session creation, setting bio\n");
 		SSL_set_bio(ssl, client, client);
-
 		dbg(freeqctx, "spawning thread\n");
 		struct conn_ctx *ctx = malloc(sizeof(struct conn_ctx));
 		ctx->ssl = ssl;
@@ -1045,6 +1096,7 @@ main (int argc, char *argv[])
 		ctx->generation = current;
 		ctx->freeqctx = freeqctx;
 		pthread_create(&tid, 0, &conn_handler, ctx);
+
 	}
 	
 	SSL_CTX_free(sslctx);

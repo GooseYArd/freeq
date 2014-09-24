@@ -102,9 +102,11 @@ struct freeq_table {
 	int refcount;
 	int numrows;
 	char *name;
+	char *identity;
 	int numcols;
 	bool destroy_data;
 	GStringChunk *strchunk;
+	GHashTable *senders;
 	GRWLock *rw_lock;
 	struct freeq_table *next;
 	struct freeq_column columns[];	
@@ -153,6 +155,9 @@ int freeq_table_write(struct freeq_ctx *c, struct freeq_table *table, int sock);
 int freeq_table_bio_write(struct freeq_ctx *c, struct freeq_table *table, BIO *b);
 int freeq_table_read(struct freeq_ctx *c, struct freeq_table **table, int sock);
 int freeq_table_bio_read(struct freeq_ctx *c, struct freeq_table **table, BIO *b);
+int freeq_table_bio_read_header(struct freeq_ctx *ctx, struct freeq_table **t, BIO *b);
+int freeq_table_bio_read_tabledata(struct freeq_ctx *ctx, struct freeq_table *t, BIO *b);
+
 int freeq_table_ssl_read(struct freeq_ctx *ctx, struct freeq_table **tbl, SSL *ssl);
 int freeq_table_sendto_ssl(struct freeq_ctx *freeqctx, struct freeq_table *t);
 
