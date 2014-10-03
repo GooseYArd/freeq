@@ -45,6 +45,7 @@
 #include "openssl/err.h"
 
 #define CSEP(j, t) j < t->numcols - 1 ? ", " : "\n"
+#define DEFAULT_STRCHUNK_LENGTH 8
 
 const char *coltypes[] = { "null",
 			   "string",
@@ -102,10 +103,13 @@ void destroy_sender_table(gpointer data) {
 
 FREEQ_EXPORT int freeq_generation_new(freeq_generation_t *gen)
 {
-	gen->tables = g_hash_table_new_full(g_str_hash, 
-					    g_str_equal, 
-					    g_free, 
+	gen->tables = g_hash_table_new_full(g_str_hash,
+					    g_str_equal,
+					    g_free,
 					    (GDestroyNotify)destroy_sender_table);
+	gen->strings = g_string_chunk_new(8);
+	if (gen->strings == NULL)
+		return -ENOMEM;
 	g_rw_lock_init(gen->rw_lock);
 	gen->refcount = 1;
 	return 0;
@@ -118,7 +122,7 @@ FREEQ_EXPORT void freeq_generation_unref(freeq_generation_t *gen)
 		g_hash_table_destroy(gen->tables);
 		g_rw_lock_clear(gen->rw_lock);
 	}
-	
+
 }
 
 FREEQ_EXPORT void freeq_log(struct freeq_ctx *ctx,
@@ -626,8 +630,8 @@ FREEQ_EXPORT struct freeq_table *freeq_table_unref(struct freeq_table *table)
 //			}
 //			else
 		}
-		if (table->strchunk != NULL)
-			g_string_chunk_free(table->strchunk);
+		if (table->strings != NULL)
+			g_string_chunk_free(table->strings);
 	}
 	else
 		dbg(table->ctx, "destroy_data not set, not freeing column data\n");
@@ -696,8 +700,8 @@ FREEQ_EXPORT int freeq_table_new(struct freeq_ctx *ctx,
 	t->refcount = 1;
 	t->numrows = 0;
 	t->ctx = ctx;
-	t->strchunk = g_string_chunk_new(8);
-	
+	t->strings = g_string_chunk_new(DEFAULT_STRCHUNK_LENGTH);
+
 	dbg(ctx, "going to allocate columns...\n");
 	va_start(argp, destroy_data);
 
@@ -730,6 +734,7 @@ FREEQ_EXPORT int freeq_table_new_fromcols(struct freeq_ctx *ctx,
 					  const char *name,
 					  int numcols,
 					  struct freeq_table **table,
+					  GStringChunk *strchnk,
 					  bool destroy_data)
 {
 	struct freeq_table *t;
@@ -745,45 +750,54 @@ FREEQ_EXPORT int freeq_table_new_fromcols(struct freeq_ctx *ctx,
 	t->destroy_data = destroy_data;
 	t->refcount = 1;
 	t->ctx = ctx;
+	t->strings = strchnk;
+	if (t->strings == NULL)
+		t->strings = g_string_chunk_new(DEFAULT_STRCHUNK_LENGTH);
 	*table = t;
 	return 0;
 }
 
-FREEQ_EXPORT int freeq_table_bio_read_header(ctx, t, b)
+FREEQ_EXPORT int freeq_table_bio_read(ctx, t, b, strchnk)
 struct freeq_ctx *ctx;
 struct freeq_table **t;
+GStringChunk *strchnk;
 BIO *b;
 {
 	union {
 		int64_t i;
 		struct longlong s;
 	} r;
-	
+
 	char *identity;
 	char *name;
 	char strbuf[1024] = {0};
-	unsigned int numcols;
-	unsigned int rb = 0;
+	ssize_t read;
+	int numcols = 0;
+	int more = 1;
+	int slen = 0;
+	unsigned int pos = 0;
 	struct freeq_table *tbl;
-	
-	rb += BIO_read_varint(b, &(r.s));
-	rb += BIO_read(b, (char *)&strbuf, (ssize_t)r.i);
-	name = strndup((char *)&strbuf, r.i);
-	dbg(ctx, "name %s read %d\n", name, rb);
-	
-	rb += BIO_read_varint(b, &(r.s));
-	rb += BIO_read(b, (char *)&strbuf, (ssize_t)r.i);
-	identity = strndup((char *)&strbuf, r.i);
-	dbg(ctx, "identity %s read %d\n", identity, rb);
+	struct freeq_column *cols;
 
-	rb += BIO_read_varint(b, &(r.s));
+	pos += BIO_read_varint(b, &(r.s));
+	pos += BIO_read(b, (char *)&strbuf, (ssize_t)r.i);
+	name = strndup((char *)&strbuf, r.i);
+	dbg(ctx, "name %s pos %d\n", name, pos);
+
+	pos += BIO_read_varint(b, &(r.s));
+	pos += BIO_read(b, (char *)&strbuf, (ssize_t)r.i);
+	identity = strndup((char *)&strbuf, r.i);
+	dbg(ctx, "identity %s pos %d\n", identity, pos);
+
+	pos += BIO_read_varint(b, &(r.s));
 	numcols = r.i;
-	dbg(ctx, "numcols %d read %d\n", numcols, rb);
-	
+	dbg(ctx, "numcols %d pos %d\n", numcols, pos);
+
 	int err = freeq_table_new_fromcols(ctx,
 					   name,
 					   numcols,
 					   &tbl,
+					   strchnk,
 					   true);
 	if (err)
 	{
@@ -792,28 +806,24 @@ BIO *b;
 		free(name);
 		return -ENOMEM;
 	}
+
+	cols = tbl->columns;
 	tbl->identity = identity;
-	free(name);
-	*t = tbl;
-	return 0;
-}
 
-FREEQ_EXPORT int freeq_table_bio_read_tabledata(ctx, tbl, b)
-struct freeq_ctx *ctx;
-struct freeq_table *tbl;
-BIO *b;
-{
-	union {
-		int64_t i;
-		struct longlong s;
-	} r;
+	for (int i = 0; i < numcols; i++)
+	{
+		pos += BIO_read(b, (char *)&(cols[i].coltype), 1);
+		dbg(ctx, "coltype for %d is %d, pos %d\n", i, cols[i].coltype, pos);
+	}
 
-	char strbuf[1024] = {0};
-	ssize_t read;
-	int numcols = 0;
-	int more = 1;
-	int slen = 0;
-	unsigned int rb = 0;
+	for (int i = 0; i < numcols; i++)
+	{
+		pos += BIO_read_varint(b, &(r.s));
+		pos += BIO_read(b, (char *)&strbuf, r.i);
+		cols[i].name = strndup((char *)&strbuf, r.i);
+		dbg(ctx, "colname for %d is %s, pos %d\n", i, cols[i].name, pos);
+	}
+	dbg(ctx, "colnames, pos %d\n", pos);
 
 	GSList **coldata = calloc(sizeof(GSList *), tbl->numcols);
 	if (coldata == NULL)
@@ -821,7 +831,7 @@ BIO *b;
 		dbg(ctx, "unable to allocate coldata lists\n");
 		return -ENOMEM;
 	}
-	
+
 	int64_t prev[tbl->numcols];
 	memset(prev, 0, tbl->numcols * sizeof(int64_t));
 
@@ -838,17 +848,17 @@ BIO *b;
 				more = 0;
 				break;
 			}
-			rb += read;
+			pos += read;
 			switch (tbl->columns[j].coltype) {
 			case FREEQ_COL_STRING:
 				dezigzag32(&(r.s));
 				slen = r.i;
-				dbg(ctx, "%d/%d len %d read %d\n",i,j, r.i, rb);
+				dbg(ctx, "%d/%d str len %d pos %d\n",i,j, r.i, pos);
 				if (slen > 0)
 				{
-					rb += BIO_read(b, (char *)&strbuf, slen);
+					pos += BIO_read(b, (char *)&strbuf, slen);
 					strbuf[slen] = 0;
-					coldata[j] = g_slist_prepend(coldata[j], g_string_chunk_insert_const(tbl->strchunk, (char *)&strbuf));
+					coldata[j] = g_slist_prepend(coldata[j], g_string_chunk_insert_const(tbl->strings, (char *)&strbuf));
 				}
 				else if (slen < 0)
 				{
@@ -857,22 +867,17 @@ BIO *b;
 				}
 				else
 				{
-					/* we shouldn't do this, if we
-					 * have an empty string we
-					 * should just send it once
-					 * and then send the offset */
-					dbg(ctx, "%d/%d empty string %d\n",i,j,slen);
+					dbg(ctx, "%d/%d empty string %d pos %d\n",i,j,slen, pos);
 					coldata[j] = g_slist_prepend(coldata[j], NULL);
-					//dbg(ctx, "string %s read %d\n", coldata[j]->data, buf.p);
+					//dbg(ctx, "string %s pos %d\n", coldata[j]->data, buf.p);
 				}
-				dbg(ctx, "%d/%d val %s\n",i,j, coldata[j]->data);
+				dbg(ctx, "%d/%d str %s pos %d\n",i,j, coldata[j]->data, pos);
 				break;
 			case FREEQ_COL_NUMBER:
 				dezigzag64(&(r.s));
-				dbg(ctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " read %d\n", i,j, r.i, prev[j] + r.i, rb);
+				dbg(ctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " pos %d\n", i,j, r.i, prev[j] + r.i, pos);
 				prev[j] = prev[j] + r.i;
 				coldata[j] = g_slist_prepend(coldata[j], GINT_TO_POINTER(prev[j]));
-				dbg(ctx, "%d/%d val %d\n",i,j, coldata[j]->data);
 				break;
 			case FREEQ_COL_IPV4ADDR:
 				break;
@@ -887,11 +892,12 @@ BIO *b;
 	}
 
 	for (int i = 0; i < tbl->numcols; i++)
-		tbl->columns[i].data = g_slist_concat(tbl->columns[i].data, 
+		tbl->columns[i].data = g_slist_concat(tbl->columns[i].data,
 						      g_slist_reverse(coldata[i]));
-	
-	dbg(ctx, "READ %d rows\n", i);
+
+	dbg(ctx, "%d rows\n", i);
 	tbl->numrows = i;
+	*t = tbl;
 	return 0;
 }
 
@@ -938,7 +944,7 @@ FREEQ_EXPORT int freeq_table_sendto_ssl(struct freeq_ctx *freeqctx, struct freeq
 	{
 		dbg(freeqctx, "bio_wrap returned zero\n");
 		SSL_clear(ssl);
-	} 
+	}
 	else
 	{
 		dbg(freeqctx, "bio_wrap returned non-zero\n");
@@ -957,10 +963,11 @@ struct freeq_table *t;
 BIO *b;
 {
 	int i = 0;
-	int c = t->numcols;
+	int numcols = t->numcols;
 	gchar *val;
 	int slen = 0;
-	unsigned int wb = 0;
+	unsigned int pos = 0;
+	const char zero = 0;
 
 	// use a union here
 	GHashTable *strtbls[t->numcols];
@@ -969,25 +976,34 @@ BIO *b;
 	GSList *colnxt[t->numcols];
 
 	slen = strlen(t->name);
-	wb += BIO_write_varint32(b, slen);
-	wb += BIO_write(b, (const char *)t->name, slen);
+	pos += BIO_write_varint32(b, slen);
+	pos += BIO_write(b, (const char *)t->name, slen);
+	dbg(ctx, "name %s write %d\n", t->name, pos);
 
 	slen = strlen(ctx->identity);
-	wb += BIO_write_varint32(b, slen);
-	wb += BIO_write(b, (const char *)ctx->identity, slen);
+	pos += BIO_write_varint32(b, slen);
+	pos += BIO_write(b, (const char *)ctx->identity, slen);
+	dbg(ctx, "identity %s write %d\n", t->identity, pos);
 
-	wb += BIO_write_varint32(b, c);
-	for (i=0; i < c; i++)
-		wb += BIO_write(b, (char *)&(t->columns[i].coltype), sizeof(freeq_coltype_t));
+	pos += BIO_write_varint32(b, t->numcols);
+	dbg(ctx, "numcols %d write %d\n", t->numcols, pos);
 
-	for (i=0; i < c; i++)
+	for (i=0; i < t->numcols; i++)
 	{
-		slen = strlen(t->columns[i].name);
-		wb += BIO_write_varint32(b, slen);
-		wb += BIO_write(b, (const char *)t->columns[i].name, slen);
+		pos += BIO_write(b, (char *)&(t->columns[i].coltype), sizeof(freeq_coltype_t));
+		dbg(ctx, "coltype for %d is %d, pos %d\n", i, t->columns[i].coltype, pos);
 	}
 
-	for (i=0; i < c; i++)
+	for (i=0; i < t->numcols; i++)
+	{
+		slen = strlen(t->columns[i].name);
+		pos += BIO_write_varint32(b, slen);
+		pos += BIO_write(b, (const char *)t->columns[i].name, slen);
+		dbg(ctx, "colname for %d is %s, pos %d\n", i, t->columns[i].name, pos);
+	}
+	dbg(ctx, "colnames, pos %d\n", pos);
+
+	for (i=0; i < t->numcols; i++)
 	{
 		if (t->columns[i].coltype == FREEQ_COL_STRING)
 			strtbls[i] = g_hash_table_new_full(g_str_hash,
@@ -997,8 +1013,9 @@ BIO *b;
 		colnxt[i] = t->columns[i].data;
 	}
 
-	for (i = 0; i < t->numrows; i++) {
-		for (int j = 0; j < c; j++)
+	for (i = 0; i < t->numrows; i++)
+	{
+		for (int j = 0; j < t->numcols; j++)
 		{
 			uint64_t num = 0;
 			switch (t->columns[j].coltype)
@@ -1007,8 +1024,8 @@ BIO *b;
 				val = colnxt[j]->data;
 				slen = strlen(val);
 				if ((val == NULL) || (slen == 0)) {
-					wb += BIO_write(b, 0, 1);
-					dbg(ctx, "%d/%d string empty\n", i,j);
+					pos += BIO_write(b, &zero, 1);
+					dbg(ctx, "%d/%d string empty pos %d\n", i, j, pos);
 					break;
 				}
 
@@ -1016,21 +1033,22 @@ BIO *b;
 				{
 					unsigned int idx = GPOINTER_TO_INT(g_hash_table_lookup(strtbls[j], val));
 					slen = idx - i;
-					wb += BIO_write_varintsigned32(b, slen);
-					dbg(ctx, "%d/%d str %s len %d write %d\n",i,j,val,slen, wb);
+					pos += BIO_write_varintsigned32(b, slen);
+					dbg(ctx, "%d/%d str %s len %d pos %d\n",i,j,val,slen, pos);
 					g_hash_table_replace(strtbls[j], val, GINT_TO_POINTER(i));
 				}
 				else
 				{
 					g_hash_table_insert(strtbls[j], val, GINT_TO_POINTER(i));
-					wb += BIO_write_varintsigned32(b, slen);
-					wb += BIO_write(b, val, slen);
-					dbg(ctx, "%d/%d str %s len %d write %d\n", i,j,val, slen, wb);
+					pos += BIO_write_varintsigned32(b, slen);
+					pos += BIO_write(b, val, slen);
+					dbg(ctx, "%d/%d str %s len %d pos %d\n", i,j,val, slen, pos);
 				}
 				break;
 			case FREEQ_COL_NUMBER:
 				num = GPOINTER_TO_INT(colnxt[j]->data);
-				wb += BIO_write_varintsigned(b, (int64_t)num - prev[j]);
+				pos += BIO_write_varintsigned(b, (int64_t)num - prev[j]);
+				dbg(ctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " pos %d\n", i,j, num, (int64_t)num-prev[j], pos);
 				prev[j] = num;
 				break;
 			case FREEQ_COL_IPV4ADDR:
@@ -1045,7 +1063,7 @@ BIO *b;
 		}
 	}
 
-	for (i = 0; i < c; i++)
+	for (i = 0; i < t->numcols; i++)
 		if (t->columns[i].coltype == FREEQ_COL_STRING)
 			g_hash_table_destroy(strtbls[i]);
 

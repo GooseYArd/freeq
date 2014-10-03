@@ -172,7 +172,7 @@ START_TEST (test_freeq_write_read_bio)
 	BIO_free(out);
 
 	in = BIO_new_file("poop2.txt", "r");	
-	freeq_table_bio_read(ctx, &t2, in);
+	freeq_table_bio_read(ctx, &t2, in, NULL);
 	BIO_free(in);
 
 	freeq_table_print(ctx, t2, stdout);
