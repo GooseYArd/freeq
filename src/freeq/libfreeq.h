@@ -26,8 +26,11 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#include "msgpack.h"
 #include <glib.h>
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <netinet/in.h>
 
 #include "openssl/bio.h"
 #include "openssl/ssl.h"
@@ -41,10 +44,8 @@ extern "C" {
  * environment, user variables, allows custom logging
  */
 struct freeq_ctx;
-struct freeq_table_header;
 struct freeq_ctx *freeq_ref(struct freeq_ctx *ctx);
 struct freeq_ctx *freeq_unref(struct freeq_ctx *ctx);
-struct freeq_table_header *freeq_table_header_unref(struct freeq_ctx *ctx, struct freeq_table_header *header);
 struct freeq_cbuf;
 
 typedef struct freeq_generation_t freeq_generation_t;
@@ -52,6 +53,7 @@ struct freeq_generation_t
 {
 	unsigned int refcount;
 	GHashTable *tables;
+	GStringChunk *strings;
 	time_t era;
 	GRWLock *rw_lock;
 	freeq_generation_t *next;
@@ -76,28 +78,28 @@ int freeq_generation_new(freeq_generation_t *gen);
 typedef uint8_t freeq_coltype_t;
 #define	FREEQ_COL_NULL 0
 #define	FREEQ_COL_STRING 1
-#define FREEQ_COL_NUMBER 2 
+#define FREEQ_COL_NUMBER 2
 #define FREEQ_COL_TIME 3
 #define FREEQ_COL_IPV4ADDR 4
 #define FREEQ_COL_IPV6ADDR 5
 
 /* typedef enum */
 /* { */
-/* 	FREEQ_COL_NULL, */
-/* 	FREEQ_COL_STRING, */
-/* 	FREEQ_COL_NUMBER, */
-/* 	FREEQ_COL_TIME, */
-/* 	FREEQ_COL_IPV4ADDR, */
-/* 	FREEQ_COL_IPV6ADDR, */
+/*	FREEQ_COL_NULL, */
+/*	FREEQ_COL_STRING, */
+/*	FREEQ_COL_NUMBER, */
+/*	FREEQ_COL_TIME, */
+/*	FREEQ_COL_IPV4ADDR, */
+/*	FREEQ_COL_IPV6ADDR, */
 /* } freeq_coltype_t; */
-	
+
 struct freeq_column {
 	freeq_coltype_t coltype;
 	char *name;
 	GSList *data;
 };
 
-struct freeq_table {	
+struct freeq_table {
 	struct freeq_ctx *ctx;
 	int refcount;
 	int numrows;
@@ -105,12 +107,24 @@ struct freeq_table {
 	char *identity;
 	int numcols;
 	bool destroy_data;
-	GStringChunk *strchunk;
+	GStringChunk *strings;
 	GHashTable *senders;
 	GRWLock *rw_lock;
 	struct freeq_table *next;
-	struct freeq_column columns[];	
+	struct freeq_column columns[];
 };
+
+/*
+options for table merging
+
+can't lock the table for the entire time we're reading
+can't really insert into the table's gstrchunk without locking it
+what if the context had a gstrchunk?
+the generation could have a gstrchunk, if we exposed a function that let you specify the table's gstrchunk!
+does gstrchunk need to be locked?
+in this scenario, all strings are allocated out of the generation, so when the generation is freed the memory is released
+this means we can append two tables without having to copy strchunks
+*/
 
 void freeq_table_print(struct freeq_ctx *ctx,
 		       struct freeq_table *table,
@@ -124,11 +138,11 @@ int freeq_table_column_new(struct freeq_ctx *ctx,
 			   size_t len);
 
 /* int freeq_table_column_new_empty(struct freeq_ctx *ctx, */
-/* 				 struct freeq_table *table, */
-/* 				 const char *name, */
-/* 				 freeq_coltype_t coltype, */
-/* 				 struct freeq_column **colp, */
-/* 				 size_t len); */
+/*				 struct freeq_table *table, */
+/*				 const char *name, */
+/*				 freeq_coltype_t coltype, */
+/*				 struct freeq_column **colp, */
+/*				 size_t len); */
 
 //int freeq_attach_all_segments(struct freeq_column *from, struct freeq_column *to);
 /* struct freeq_column *freeq_column_get_next(struct freeq_column *column); */
@@ -137,9 +151,9 @@ int freeq_table_column_new(struct freeq_ctx *ctx,
 /* const char *freeq_column_get_name(struct freeq_column *column); */
 /* const char *freeq_column_get_value(struct freeq_column *column); */
 /* #define freeq_column_foreach(column, first_entry) \ */
-/* 	for (column = first_entry; \ */
-/* 	     column != NULL; \ */
-/* 	     column = freeq_column_get_next(column)) */
+/*	for (column = first_entry; \ */
+/*	     column != NULL; \ */
+/*	     column = freeq_column_get_next(column)) */
 
 /*
  * freeq_table
@@ -154,9 +168,9 @@ struct freeq_ctx *freeq_table_get_ctx(struct freeq_table *table);
 int freeq_table_write(struct freeq_ctx *c, struct freeq_table *table, int sock);
 int freeq_table_bio_write(struct freeq_ctx *c, struct freeq_table *table, BIO *b);
 int freeq_table_read(struct freeq_ctx *c, struct freeq_table **table, int sock);
-int freeq_table_bio_read(struct freeq_ctx *c, struct freeq_table **table, BIO *b);
+int freeq_table_bio_read(struct freeq_ctx *c, struct freeq_table **table, BIO *b, GStringChunk *strchunk);
 int freeq_table_bio_read_header(struct freeq_ctx *ctx, struct freeq_table **t, BIO *b);
-int freeq_table_bio_read_tabledata(struct freeq_ctx *ctx, struct freeq_table *t, BIO *b);
+int freeq_table_bio_read_tabledata(struct freeq_ctx *ctx, struct freeq_table *t, BIO *b, GStringChunk *strchnk);
 
 int freeq_table_ssl_read(struct freeq_ctx *ctx, struct freeq_table **tbl, SSL *ssl);
 int freeq_table_sendto_ssl(struct freeq_ctx *freeqctx, struct freeq_table *t);
@@ -166,14 +180,15 @@ int freeq_table_new(struct freeq_ctx *ctx,
 		    int numcols,
 		    freeq_coltype_t coltypes[],
 		    const char *colnames[],
-		    struct freeq_table **table, 
+		    struct freeq_table **table,
 		    bool destroy_data,
 		    ...);
 
 int freeq_table_new_fromcols(struct freeq_ctx *ctx,
 			     const char *name,
 			     int numcols,
-			     struct freeq_table **table, 
+			     struct freeq_table **table,
+			     GStringChunk *strchnk,
 			     bool destroy_data);
 
 int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *buf, size_t bufsize, struct freeq_table **table);
