@@ -14,10 +14,7 @@
 #include "freeq/libfreeq.h"
 #include "libfreeq-private.h"
 
-#include <nanomsg/nn.h>
-#include <nanomsg/pipeline.h>
-#include <nanomsg/tcp.h>
-#include <nanomsg/survey.h>
+#include <arpa/inet.h>
 
 /* control */
 #include "control/stralloc.h"
@@ -25,7 +22,8 @@
 #include "control/control.h"
 #include "control/qsutil.h"
 
-#define SERVER_PORT 13000
+#define SERVER_PORT 13001
+#define SQL_PORT 13000
 #define ERROR 1
 #define SUCCESS 0
 #define MAX_MSG 8192
@@ -49,11 +47,16 @@ thread_info_t pthread_info;
 
 sqlite4 *pDb;
 
+struct freeqd_state {
+	freeq_generation_t **current;
+	GRWLock rw_lock;
+};
+
 struct conn_ctx {
 	sqlite4 *pDb;
 	SSL *ssl;
 	struct freeq_ctx *freeqctx;
-	freeq_generation_t *generation;
+	struct freeqd_state *fst;
 };
 
 struct CRYPTO_dynlock_value
@@ -82,6 +85,7 @@ void init_dhparams(void) {
 	int_error("Error reading DH parameters from dh1024.pem");
     BIO_free(bio);
 }
+
 DH *tmp_dh_callback(SSL *ssl, int is_export, int keylength)
 {
     DH *ret;
@@ -155,10 +159,11 @@ void g_hash_destroy_freeq_table(gpointer data) {
 	freeq_table_unref(tbl);
 }
 
-int generation_table_merge(struct freeq_ctx *ctx, freeq_generation_t *gen, BIO *bio)
+int generation_table_merge(struct freeq_ctx *ctx, struct freeqd_state *fst, BIO *bio)
 {
 	struct freeq_table *tbl;
 	struct freeq_table *curtbl;
+	freeq_generation_t *gen = *(fst->current);
 	int err;
 
 	/* this needs to be moved outside this function */
@@ -175,43 +180,51 @@ int generation_table_merge(struct freeq_ctx *ctx, freeq_generation_t *gen, BIO *
 	 * and tail of each senders segment of the list and remove
 	 * it */
 
-	g_rw_lock_writer_lock(gen->rw_lock);
-	curtbl = (struct freeq_table *)g_hash_table_lookup(gen->tables, tbl->identity);
+	g_rw_lock_writer_lock(&(gen->rw_lock));
+	curtbl = (struct freeq_table *)g_hash_table_lookup(gen->tables, tbl->name);
 	if (curtbl != NULL)
 	{
 		dbg(ctx, "at least one host has sent %s for this generation\n", tbl->name);
-		if (g_hash_table_contains(tbl->senders, tbl->identity))
+		if (curtbl->senders != NULL && g_hash_table_contains(curtbl->senders, tbl->identity))
+		{
 			/* we already put a table from this sender into this generation
 			   what should we do?
 			 */
 			dbg(ctx, "uh oh, we heard from this sender twice in a generation :(\n");
-		else {
+		}
+		else
+		{
 			/* merge the tables */
 			dbg(ctx, "would be merging tables here!\n");
 		}
-		g_rw_lock_writer_unlock(gen->rw_lock);
+		g_rw_lock_writer_unlock(&(gen->rw_lock));
 		return 1;
 	}
 
-	/* we have not received any instances of this table yet */
-	GHashTable* hash = g_hash_table_new_full(g_str_hash,
-						 g_str_equal,
-						 g_free,
-						 NULL);
-	if (hash == NULL) {
-		g_rw_lock_writer_unlock(gen->rw_lock);
-		err(ctx, "free a bunch of stuff and return\n");
-		freeq_table_unref(tbl);
-		return 1;
-	}
-
-	dbg(ctx, "table not in generation, reading it\n");
-	g_hash_table_insert(hash, tbl->identity, tbl);
-	dbg(ctx, "success, adding table\n");
-	g_hash_table_insert(gen->tables, tbl->name, hash);
-	g_rw_lock_writer_unlock(gen->rw_lock);
+	g_hash_table_insert(gen->tables, tbl->name, tbl);
+	g_rw_lock_writer_unlock(&(gen->rw_lock));
 
 }
+
+/* int freeq_table_add_sender() */
+/* { */
+/*	/\* we have not received any instances of this table yet *\/ */
+/*	GHashTable* hash = g_hash_table_new_full(g_str_hash, */
+/*						 g_str_equal, */
+/*						 g_free, */
+/*						 NULL); */
+/* //						 (GDestroyNotify)destroy_sender_table); */
+/*	if (hash == NULL) { */
+/*		g_rw_lock_writer_unlock(gen->rw_lock); */
+/*		err(ctx, "free a bunch of stuff and return\n"); */
+/*		//freeq_table_unref(tbl); */
+/*		return 1; */
+/*	} */
+
+/*	gen->tables = hash; */
+/*	g_hash_table_insert(hash, tbl->name, tbl); */
+/*	g_hash_table_insert(gen->tables, tbl->name, hash); */
+/* } */
 
 int bio_peername(BIO *bio, char **hostname)
 {
@@ -280,10 +293,16 @@ void* conn_handler(void *arg)
 	BIO_push(buf_io, ssl_bio);
 
 	fprintf(stderr, "SSL Connection opened\n");
-	if (generation_table_merge(ctx->freeqctx, ctx->generation, buf_io))
+	if (generation_table_merge(ctx->freeqctx, ctx->fst, buf_io))
+	{
+		fprintf(stderr, "table merge failed\n");
 		SSL_shutdown(ssl);
+	}
 	else
+	{
+		fprintf(stderr, "table merged ok\n");
 		SSL_clear(ssl);
+	}
 
 	fprintf(stderr, "SSL Connection closed\n");
 	SSL_free(ssl);
@@ -367,11 +386,10 @@ const freeq_coltype_t sqlite_to_freeq_coltype[] = {
 
 int table_ddl(struct freeq_ctx *ctx, struct freeq_table *tbl, GString *stm)
 {
-//	std::stringstream stm;
-//	GString *stm = *gs;
-//	stm = g_string_erase(stm,0,-1);
+	if (stm == NULL)
+		return 1;
+
 	g_string_printf(stm, "CREATE TABLE IF NOT EXISTS %s (", tbl->name);
-//	stm << "CREATE TABLE IF NOT EXISTS " << tbl->name << "(";
 
 	for (int i = 0; i < tbl->numcols; i++)
 	{
@@ -397,10 +415,33 @@ int ddl_insert(struct freeq_ctx *ctx, struct freeq_table *tbl, GString *stm)
 	dbg(ctx, "statement: %s\n", stm->str);
 }
 
-int to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
+int gen_to_db(struct freeq_ctx *ctx, freeq_generation_t *g, sqlite4 *mDb)
+{
+	GHashTableIter iter;
+	guint size = g_hash_table_size(g->tables);
+
+	uint32_t *val;
+	uint32_t *key_;
+
+	g_hash_table_iter_init(&iter, g->tables);
+	while (g_hash_table_iter_next(&iter, (gpointer) &key_, (gpointer) &val))
+	{
+		printf("key %u ---> %u\n", (uint32_t)*key_, (uint32_t)*val);
+	}
+
+	return 0;
+
+}
+
+int tb_to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 {
 	sqlite4_stmt *stmt;
 	GString *sql = g_string_sized_new(255);
+
+	GSList *colp[tbl->numcols];
+	memset(colp, 0, tbl->numcols * sizeof(GSList *) );
+	for (int j = 0; j < tbl->numcols; j++)
+		colp[j] = tbl->columns[j].data;
 
 	const char **strarrp = NULL;
 	int *intarrp = NULL;
@@ -439,19 +480,17 @@ int to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 	{
 		for (int j = 0; j < tbl->numcols; j++)
 		{
-			//strarrp = (const char **)seg->data;
-			//intarrp = (int *)seg->data;
 			switch (tbl->columns[i].coltype)
 			{
 			case FREEQ_COL_STRING:
-				sqlite4_bind_text(stmt, j, strarrp[i], strlen(strarrp[i]), SQLITE4_TRANSIENT, NULL);
+				sqlite4_bind_text(stmt, j, colp[j]->data, strlen(colp[j]->data), SQLITE4_TRANSIENT, NULL);
 				if (res != SQLITE4_OK)
 				{
 					dbg(ctx, "failed bind: %s", sqlite4_errmsg(mDb));
 				}
 				break;
 			case FREEQ_COL_NUMBER:
-				res = sqlite4_bind_int(stmt, j, intarrp[i]);
+				res = sqlite4_bind_int(stmt, j, GPOINTER_TO_INT(colp[j]->data));
 				if (res != SQLITE4_OK)
 				{
 					dbg(ctx, "failed bind: %s", sqlite4_errmsg(mDb));
@@ -460,8 +499,7 @@ int to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 			default:
 				break;
 			}
-			//colp = colp->next;
-			j++;
+			colp[j] = g_slist_next(colp[j]);
 		}
 		if (sqlite4_step(stmt) != SQLITE4_DONE)
 		{
@@ -480,16 +518,47 @@ int to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 	sqlite4_finalize(stmt);
 }
 
-/* static */
-/* int log_monitor(void *NotUsed, int argc, sqlite4_value **argv, const char **azColName) */
-/* { */
-/*	int i; */
-/*	for (i = 0; i < argc; i++) */
-/*		printf("%s = %d\n", azColName[i], atoi((char *)argv[i])); */
+void *status_logger (void *arg)
+{
+	struct conn_ctx *ctx = (struct conn_ctx *)arg;
+	freeq_generation_t *curgen;
 
-/*	printf("\n"); */
-/*	return 0; */
-/* } */
+	printf("STATUS_LOGGER STARTING\n");
+	time_t dt;
+	while (1)
+	{
+		sleep(5);
+		//dbg(ctx->freeqctx, "mark\n");
+		curgen = *(ctx->fst->current);
+		dt = time(NULL) - curgen->era;
+		if (dt > 30)
+		{
+			freeq_generation_t *newgen;
+			dbg(ctx->freeqctx, "generation is ready to publish\n");
+			if (freeq_generation_new(&newgen))
+			{
+				dbg(ctx->freeqctx, "unable to allocate generation\n");
+				continue;
+			}
+
+			/* advance generation, take pointer to previous generation */
+			g_rw_lock_writer_lock(&(ctx->fst->rw_lock));
+			ctx->fst->current = &newgen;
+			g_rw_lock_writer_unlock(&(ctx->fst->rw_lock));
+
+			g_rw_lock_writer_lock(&(curgen->rw_lock));
+
+			g_rw_lock_writer_unlock(&(curgen->rw_lock));
+
+			/* to_db on previous generation */
+			/* free previous generation */
+
+
+		} else {
+			dbg(ctx->freeqctx, "generation age is %d\n", dt);
+		}
+	}
+}
 
 void *monitor (void *arg)
 {
@@ -517,127 +586,6 @@ void *monitor (void *arg)
 
 }
 
-/* /\* in aggregator mode, send a survey request to our pool of clients *\/ */
-/* void *aggregator(void *arg) */
-/* { */
-/*	struct receiver_info *ri = (struct receiver_info *)arg; */
-/*	int err; */
-/*	freeq_ctx *ctx; */
-/*	err = freeq_new(&ctx, "appname", "identity"); */
-/*	if (err) */
-/*	{ */
-/*		dbg(ctx, "unable to create freeq context"); */
-/*		return NULL; */
-/*	} */
-
-/*	dbg(ctx, "starting aggregator thread"); */
-/*	freeq_set_log_priority(ctx, 10); */
-
-/*	int sock = nn_socket(AF_SP, NN_SURVEYOR); */
-/*	assert(sock >= 0); */
-/*	assert(nn_bind(sock, "tcp://\*:13001") >= 0); */
-/*	sleep(1); // wait for connections */
-
-/* #define DATE "poop" */
-
-/*	int sz_d = strlen(DATE) + 1; // '\0' too */
-/*	printf ("SERVER: SENDING DATE SURVEY REQUEST\n"); */
-/*	int bytes = nn_send(sock, DATE, sz_d, 0); */
-/*	assert(bytes == sz_d); */
-
-/*	while (1) */
-/*	{ */
-/*		char *buf = NULL; */
-/*		int bytes = nn_recv(sock, &buf, NN_MSG, 0); */
-/*		if (bytes == ETIMEDOUT) break; */
-/*		if (bytes >= 0) */
-/*		{ */
-/*			printf ("SERVER: RECEIVED \"%s\" SURVEY RESPONSE\n", buf); */
-/*			nn_freemsg (buf); */
-/*		} */
-/*	} */
-/*	nn_shutdown(sock, 0); */
-/* } */
-
-// void *receiver (void *arg)
-// {
-//	struct receiver_info *ri = (struct receiver_info *)arg;
-//	freeq_ctx *ctx;
-//	int res;
-//	int err;
-//	int sock = nn_socket(AF_SP, NN_PULL);
-
-//	err = freeq_new(&ctx, "appname", "identity");
-//	if (err)
-//	{
-//		dbg(ctx, "unable to create freeq context");
-//		return NULL;
-//	}
-
-//	freeq_set_log_priority(ctx, 10);
-
-//	assert(sock >= 0);
-//	assert(nn_bind (sock, ri->url) >= 0);
-//	dbg(ctx, "freeqd receiver listening at %s\n", ri->url);
-
-//	freeq_generation_t fg;
-// //	freeq_generation fg;
-// //	freeq_generation::iterator it;
-
-//	while (1)
-//	{
-//		char *buf = NULL;
-//		dbg(ctx, "generation has %d entries\n", fg.size());
-//		int size = nn_recv(sock, &buf, NN_MSG, 0);
-//		assert(size >= 0);
-
-//		freeq_table *table;
-//		dbg(ctx, "receiver(): read %d bytes\n", size);
-//		//res = freeq_table_header_from_msgpack(ctx, buf, size, &table);
-
-//		if (res)
-//		{
-//			dbg(ctx, "invalid header in message, rejecting\n");
-//			continue;
-//		}
-
-//		//dbg(ctx, "identity: %s name %s rows %d\n", table->identity, table->name, table->numrows);
-//		//freeq_generation::iterator it = fg.find(table->name);
-//		//if (it == fg.end())
-
-//		{
-//			dbg(ctx, "receiver: this is a new table\n");
-//			fg[table->name] = table;
-//		}
-//		else
-//		{
-//			struct freeq_table *tmp = it->second;
-//			struct freeq_table *tail = NULL;
-//			while (tmp != NULL)
-//			{
-//				//if (tmp->identity == table->identity)
-//				//	break;
-//				tail = tmp;
-//				tmp = tmp->next;
-//			}
-
-//			/* we don't have a table from this provider */
-//			if (tmp == NULL)
-//			{
-//				//dbg(ctx, "receiver: appending table for %s/%s\n", table->name, table->identity);
-//				tail->next = table;
-//			}
-//			else
-//			{
-//				//dbg(ctx, "generation already contains %s/%s\n", table->name, table->identity);
-//			}
-//		}
-
-//		to_db(ctx, table, ri->pDb);
-//		//to_text(ctx, table);
-//		nn_freemsg(buf);
-//	}
-// }
 
 void cleanup(int server)
 {
@@ -689,156 +637,109 @@ int readnf (int fd, char *line)
 	return SUCCESS;
 }
 
-/* void* handler(void *paramsd) { */
-/*	struct sockaddr_in cliAddr; */
-/*	char line[MAX_MSG]; */
-/*	int res; */
-/*	int client_local; */
+void* sqlhandler(void *paramsd) {
+	struct freeq_ctx *ctx;
+	struct sockaddr_in cliAddr;
+	char line[MAX_MSG];
+	int res;
+	int client_local;
 
-/*	//int bsize; */
-/*	//const char *s; */
-/*	//char **strings; */
-/*	//int *vals; */
+	int bsize;
+	const char *s;
+	char **strings;
+	int *vals;
 
-/*	freeq_ctx *ctx; */
-/*	//struct freeq_table *tblp; */
-/*	//struct freeq_column *colp; */
-/*	//struct freeq_column_segment *seg; */
+	struct freeq_table *tblp;
+	struct freeq_column *colp;
+	struct freeq_column_segment *seg;
 
-/*	//sqlite4_stmt *pStmt; */
-/*	socklen_t addr_len; */
-/*	//int segment_size = 2000; */
+	sqlite4_stmt *pStmt;
+	socklen_t addr_len;
+	int segment_size = 2000;
 
-/*	client_local = *((int *)paramsd); */
-/*	addr_len = sizeof(cliAddr); */
+	BIO *out;
+	//BIO_free(out);
 
-/*	getpeername(client_local, (struct sockaddr*)&cliAddr, &addr_len); */
-/*	memset(line, 0, MAX_MSG); */
+	client_local = *((int *)paramsd);
+	addr_len = sizeof(cliAddr);
 
-/*	res = freeq_new(&ctx, "freeqd_handler", "identity"); */
-/*	freeq_set_log_priority(ctx, 10); */
-/*	if (res) */
-/*	{ */
-/*		dbg(ctx, "unable to create freeq context\n"); */
-/*		return NULL; */
-/*	} */
+	getpeername(client_local, (struct sockaddr*)&cliAddr, &addr_len);
+	memset(line, 0, MAX_MSG);
 
-/*	while(!recvstop) */
-/*	{ */
-//		res = readline(client_local, line, MAX_MSG);
-//		dbg(ctx, "received query from client: \"%s\" res=%d\n", line, res);
-//		if (res == 0)
-//			break;
+	res = freeq_new(&ctx, "freeqd_handler", "identity");
+	freeq_set_log_priority(ctx, 10);
+	if (res)
+	{
+		dbg(ctx, "unable to create freeq context\n");
+		return NULL;
+	}
 
-//		if (res == 2)
-//			continue;
+	out = BIO_new_fd(client_local, BIO_NOCLOSE);
 
-//		res = sqlite4_prepare(pDb, line, -1, &pStmt, 0);
-//		if (res != SQLITE4_OK)
-//		{
-//			dbg(ctx, "prepare failed, sending error\n");
-//			freeq_error_write_sock(ctx, sqlite4_errmsg(pDb), client_local);
-//			sqlite4_finalize(pStmt);
-//			continue;
-//		}
+	while(!recvstop)
+	{
+		res = readline(client_local, line, MAX_MSG);
+		dbg(ctx, "received query from client: \"%s\" res=%d\n", line, res);
+		if (res == 0)
+			break;
 
-//		/* column type is unset until the query has been
-//		 * stepped once */
-//		if (sqlite4_step(pStmt) != SQLITE4_ROW)
-//		{
-//			freeq_error_write_sock(ctx, sqlite4_errmsg(pDb), client_local);
-//			sqlite4_finalize(pStmt);
-//			continue;
-//		}
+		if (res == 2)
+			continue;
 
-//		freeq_table_new_from_string(ctx, "result", &tblp);
-//		if (!tblp)
-//		{
-//			dbg(ctx, "unable to allocate table\n");
-//			freeq_error_write_sock(ctx, "ENOMEM", client_local);
-//			sqlite4_finalize(pStmt);
-//			continue;
-//		}
+		res = sqlite4_prepare(pDb, line, strlen(line), &pStmt, 0);
+		if (res != SQLITE4_OK)
+		{
+			dbg(ctx, "prepare failed, sending error, res was %d\n", res);
+			//freeq_error_write_sock(ctx, sqlite4_errmsg(pDb), client_local);
+			dbg(ctx, sqlite4_errmsg(pDb));
+			BIO_printf(out, "error: %s\n", sqlite4_errmsg(pDb));
+			sqlite4_finalize(pStmt);
+			continue;
+		}
+		BIO_write(out, "statement prepared\n", 20);
+		/* column type is unset until the query has been
+		 * stepped once */
+		if (sqlite4_step(pStmt) != SQLITE4_ROW)
+		{
+			//freeq_error_write_sock(ctx, sqlite4_errmsg(pDb), client_local);
+			sqlite4_finalize(pStmt);
+			continue;
+		}
 
-//		int numcols = sqlite4_column_count(pStmt);
-//		dbg(ctx, "creating response table %s, %d columns\n", tblp->name, numcols);
-//		int j = 0;
+		if (!tblp)
+		{
+			dbg(ctx, "unable to allocate table\n");
+			//freeq_error_write_sock(ctx, "ENOMEM", client_local);
+			sqlite4_finalize(pStmt);
+			continue;
+		}
 
-//		for (int i = 0; i < numcols; i++)
-//		{
-//			const char *cname = strdup(sqlite4_column_name(pStmt, i));
-//			int s4ctype = sqlite4_column_type(pStmt, i);
-//			freeq_coltype_t ctype = sqlite_to_freeq_coltype[s4ctype];
-//			dbg(ctx, "adding column %s sqlite4_type %d freeq_type %d\n", cname, s4ctype, ctype);
-//			res = freeq_table_column_new_empty(ctx, tblp, cname, ctype, &colp, segment_size);
-//			if (res < 0)
-//			{
-//				dbg(ctx, "unable to allocate column\n");
-//				freeq_error_write_sock(ctx, "ENOMEM", client_local);
-//				sqlite4_finalize(pStmt);
-//				freeq_table_unref(tblp);
-//				continue;
-//			}
-//		}
+		int numcols = sqlite4_column_count(pStmt);
+		dbg(ctx, "creating response table %s, %d columns\n", tblp->name, numcols);
+		int j = 0;
 
-//		do {
-//			if (j >= segment_size)
-//			{
-//				// pack and send table, flag continuation
-//				//send(client_local, "segment\n", 8, 0);
-//				tblp->numrows = 0;
-//				j = 0;
-//			}
+		for (int i = 0; i < numcols; i++)
+		{
+			sqlite4_column_name(pStmt, i);
+			freeq_coltype_t ctype = sqlite_to_freeq_coltype[sqlite4_column_type(pStmt, i)];
+		}
 
-//			dbg(ctx, "handling row %d\n", j);
-//			colp = tblp->columns;
-//			for (int i = 0; i < numcols; i++)
-//			{
-//				seg = colp->segments;
-//				switch (colp->coltype) {
-//				case FREEQ_COL_STRING:
-//					strings = (char **)seg->data;
-//					s = sqlite4_column_text(pStmt, i, &bsize);
-//					strings[j] = strndup(s, bsize);
-//					break;
-//				case FREEQ_COL_NUMBER:
-//					vals = (int *)seg->data;
-//					vals[j] = sqlite4_column_int(pStmt, i);
-//					break;
-//				default:
-//					break;
-//				}
-//				colp = colp->next;
-//			}
+		do {
+			BIO_write(out, "row\n", 4);
+		} while (sqlite4_step(pStmt) == SQLITE4_ROW);
 
-//			dbg(ctx, "setting all segments to len %d\n", j);
-//			colp = tblp->columns;
-//			while (colp != NULL)
-//			{
-//				colp->segments->len = j+1;
-//				colp = colp->next;
-//			}
+		//dbg(ctx, "setting table, length %d\n", tblp->numrows);
+		sqlite4_finalize(pStmt);
+		dbg(ctx, "sending result");
+		//freeq_table_write_sock(ctx, tblp, client_local);
+		memset(line, 0, MAX_MSG);
+		freeq_table_unref(tblp);
+		sleep(1);
+	}
 
-//			dbg(ctx, "setting table to len %d\n", j);
-//			tblp->numrows = j+1;
-//			j++;
-
-//		} while (sqlite4_step(pStmt) == SQLITE4_ROW);
-
-
-//		//dbg(ctx, "setting table, length %d\n", tblp->numrows);
-//		sqlite4_finalize(pStmt);
-//		// pack and send table, flag no continuation
-//		dbg(ctx, "sending result");
-//		freeq_table_write_sock(ctx, tblp, client_local);
-//		memset(line, 0, MAX_MSG);
-//		freeq_table_unref(tblp);
- /*		sleep(1); */
- /*	} */
-
- /*	freeq_unref(ctx); */
- /*	close(client_local); */
- /* } */
+	//freeq_unref(ctx);
+	close(client_local);
+ }
 
 
 void *sqlserver(void *arg) {
@@ -847,7 +748,7 @@ void *sqlserver(void *arg) {
 	int optval;
 	int err;
 	socklen_t addr_len;
-	//pthread_t thread;
+	pthread_t thread;
 
 	struct sockaddr_in cliAddr;
 	struct sockaddr_in servAddr;
@@ -872,7 +773,7 @@ void *sqlserver(void *arg) {
 
 	servAddr.sin_family = AF_INET;
 	servAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	servAddr.sin_port = htons(SERVER_PORT);
+	servAddr.sin_port = htons(SQL_PORT);
 	memset(servAddr.sin_zero, 0, 8);
 	optval = 1;
 
@@ -889,7 +790,7 @@ void *sqlserver(void *arg) {
 
 	while (!recvstop)
 	{
-		dbg(ctx, "waiting for data on port %u\n", SERVER_PORT);
+		dbg(ctx, "waiting for data on port %u\n", SQL_PORT);
 		addr_len = sizeof(cliAddr);
 		client = accept(server, (struct sockaddr *) &cliAddr, &addr_len);
 		if (client < 0)
@@ -897,56 +798,25 @@ void *sqlserver(void *arg) {
 			dbg(ctx, "cannot accept connection ");
 			break;
 		}
-		//pthread_create(&thread, 0, &handler, &client);
+		dbg(ctx, "accepted connection, creating sqlhandler thread\n");
+		pthread_create(&thread, 0, &sqlhandler, &client);
 	}
 	close(server);
 	freeq_unref(ctx);
 	exit(0);
 }
 
-int
-notify_clients(void)
+int init_freeqd_state(struct freeq_ctx *freeqctx, struct freeqd_state *s)
 {
-	int i;
-	int p;
-	int err;
-	char uribuf[64];
-	char fmt[] = "tcp://%s:13000";
-	struct freeq_ctx *ctx;
-
-	//struct constmap mapclients;
-	const char *clientfn = "control/clients";
-	stralloc clients = {0};
-
-	err = freeq_new(&ctx, "appname", "identity");
-	if (err < 0)
-		exit(EXIT_FAILURE);
-
-	freeq_set_log_priority(ctx, 10);
-
-	if (control_readfile(&clients,(char *)clientfn,1) != 1)
+	freeq_generation_t *fgen;
+	if (freeq_generation_new(&fgen))
 	{
-		fprintf(stderr, "control/clients not found\n");
-		return 0;
-	} else {
-		for (i = 0, p = i;i < clients.len; ++i) {
-			if (!clients.s[i]) {
-				if (snprintf((char *)&uribuf, 64, (char *)fmt, (char *)clients.s+p) <= 64)
-				{
-					int sock = nn_socket(AF_SP, NN_PUSH);
-					assert(sock >= 0);
-					assert(nn_connect(sock, uribuf) >= 0);
-					dbg(ctx, "sent invite to %s\n", &uribuf);
-					//fprintf(stderr, "sending %d bytes to %s\n", sbuf.size, url);
-					//int bytes = nn_send(sock, sbuf.data, sbuf.size, 0);
-					nn_shutdown(sock, 0);
-				}
-				p = i+1;
-			}
-		}
+		dbg(freeqctx, "unable to allocate generation\n");
+		return 1;
+		//exit(EXIT_FAILURE);
 	}
-	//while (!constmap_init(&mapclients,clients.s,clients.len,0)) nomem();
-	//constmap_free(&mapclients);
+	g_rw_lock_init(&(s->rw_lock));
+	s->current = &fgen;
 }
 
 int
@@ -961,11 +831,14 @@ main (int argc, char *argv[])
 	SSL_CTX *sslctx;
 	pthread_t tid;
 
+	struct freeqd_state fst;
+
 	//pthread_t t_receiver;
 	//pthread_t t_aggregator;
 	//pthread_t t_recvinvite;
 	pthread_t t_monitor;
-//	pthread_t t_sqlserver;
+	pthread_t t_status_logger;
+	pthread_t t_sqlserver;
 
 	static stralloc clients = {0};
 	static stralloc aggport = {0};
@@ -997,16 +870,18 @@ main (int argc, char *argv[])
 	dbg(freeqctx, "starting monitor thread\n");
 	pthread_create(&t_monitor, 0, &monitor, pDb);
 
-	freeq_generation_t *current;
+	init_freeqd_state(freeqctx, &fst);
 
-	if (freeq_generation_new(current))
-	{
-		dbg(freeqctx, "unable to allocate generation\n");
-		exit(EXIT_FAILURE);
-	}
+	struct conn_ctx status_ctx;
+	status_ctx.ssl = ssl;
+	status_ctx.pDb = pDb;
+	status_ctx.fst = &fst;
+	status_ctx.freeqctx = freeqctx;
+	struct conn_ctx *sctx = &status_ctx;
+	pthread_create(&t_status_logger, 0, &status_logger, sctx);
 
-	dbg(freeqctx, "readling clients file\n");
-	if (control_readfile(&clients,(char *)"control/clients",1) != 1)
+	dbg(freeqctx, "reading clients file\n");
+	if (control_readfile(&clients,(char *)"control/clients",1))
 	{
 		dbg(freeqctx, "clients present, setting up agg database\n");
 		//pthread_create(&t_aggregator, 0, &aggregator, (void *)&ri);
@@ -1017,23 +892,23 @@ main (int argc, char *argv[])
 			fprintf(stderr, "failed to open in-memory db\n");
 			exit(res);
 		}
-		//notify_clients();
+	} else {
+		dbg(freeqctx, "failed to read clients file, database not initialized\n");
 	}
-
 	//if (control_readfile(&clients,"",1) != 1)
 	//	pthread_create(&t_receiver, 0, &receiver, (void *)&ri);
 	//	pthread_create(&t_recvinvite, 0, &recvinvite, (void *)recvinvite_nnuri);
 	//}
 
-//	if (0)
-//		pthread_create(&t_sqlserver, 0, &sqlserver, (void *)&ri);
+	struct conn_ctx sqlctx;
+	sqlctx.pDb = pDb;
+	pthread_create(&t_sqlserver, 0, &sqlserver, (void *)&sqlctx);
 
 //	res = sqlite4_exec(pDb, "create table if not exists freeq_stats(int last);", log_monitor, NULL);
 //	if (res != SQLITE4_OK)
 //	{
 //		printf("creating freeq_stats failed: %d %s\n", res, sqlite4_errmsg(pDb));
 //	}
-
 
 	dbg(freeqctx, "initializing SSL mutexes\n");
 	mutex_buf = (pthread_mutex_t *)malloc(CRYPTO_num_locks() *sizeof(pthread_mutex_t));
@@ -1065,11 +940,11 @@ main (int argc, char *argv[])
 	dbg(freeqctx, "setting static lock callbacks\n");
 	res = control_readline(&aggport, "control/aggport");
 	if (!res)
-		stralloc_cats(&aggport, "localhost:13000");
+		stralloc_cats(&aggport, "localhost:13001");
 	stralloc_0(&aggport);
 
 	dbg(freeqctx, "starting aggregation listener on %s\n", aggport);
-	acc = BIO_new_accept("127.0.0.1:13000");
+	acc = BIO_new_accept("127.0.0.1:13001");
 	if (!acc)
 		int_error("Error creating server socket");
 
@@ -1082,7 +957,6 @@ main (int argc, char *argv[])
 		if (BIO_do_accept(acc) <= 0)
 			int_error("Error accepting connection");
 		dbg(freeqctx, "accepted connection, setting up ssl\n");
-
 		/*bio_peername(acc);*/
 
 		client = BIO_pop(acc);
@@ -1090,13 +964,16 @@ main (int argc, char *argv[])
 			int_error("Error creating SSL context");
 		dbg(freeqctx, "session creation, setting bio\n");
 		SSL_set_bio(ssl, client, client);
+
 		dbg(freeqctx, "spawning thread\n");
 		struct conn_ctx *ctx = malloc(sizeof(struct conn_ctx));
 		ctx->ssl = ssl;
 		ctx->pDb = pDb;
-		ctx->generation = current;
+		ctx->fst = &fst;
 		ctx->freeqctx = freeqctx;
+
 		pthread_create(&tid, 0, &conn_handler, ctx);
+		// TODO: free ctx
 
 	}
 

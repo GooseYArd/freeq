@@ -52,10 +52,10 @@ typedef struct freeq_generation_t freeq_generation_t;
 struct freeq_generation_t
 {
 	unsigned int refcount;
+	time_t era;
 	GHashTable *tables;
 	GStringChunk *strings;
-	time_t era;
-	GRWLock *rw_lock;
+	GRWLock rw_lock;
 	freeq_generation_t *next;
 };
 
@@ -68,7 +68,7 @@ int freeq_get_log_priority(struct freeq_ctx *ctx);
 void freeq_set_log_priority(struct freeq_ctx *ctx, int priority);
 const char *freeq_get_identity(struct freeq_ctx *ctx);
 void freeq_set_identity(struct freeq_ctx *ctx, const char *identity);
-int freeq_generation_new(freeq_generation_t *gen);
+int freeq_generation_new(freeq_generation_t **gen);
 /*
  * freeq_list
  *

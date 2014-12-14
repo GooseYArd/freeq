@@ -101,17 +101,26 @@ void destroy_sender_table(gpointer data) {
 	g_hash_table_destroy(senders);
 }
 
-FREEQ_EXPORT int freeq_generation_new(freeq_generation_t *gen)
+FREEQ_EXPORT int freeq_generation_new(freeq_generation_t **gen)
 {
-	gen->tables = g_hash_table_new_full(g_str_hash,
-					    g_str_equal,
-					    g_free,
-					    (GDestroyNotify)destroy_sender_table);
-	gen->strings = g_string_chunk_new(8);
-	if (gen->strings == NULL)
+	freeq_generation_t *g = malloc(sizeof(freeq_generation_t));
+	if (g == NULL)
+		return 1;
+
+	g->tables = g_hash_table_new_full(g_str_hash,
+					  g_str_equal,
+					  g_free,
+					  (GDestroyNotify)destroy_sender_table);
+	g->strings = g_string_chunk_new(8);
+	if (g->strings == NULL)
 		return -ENOMEM;
-	g_rw_lock_init(gen->rw_lock);
-	gen->refcount = 1;
+
+
+	g_rw_lock_init(&(g->rw_lock));
+
+	g->refcount = 1;
+	g->era = time(NULL);
+	*gen = g;
 	return 0;
 }
 
@@ -120,7 +129,7 @@ FREEQ_EXPORT void freeq_generation_unref(freeq_generation_t *gen)
 	if (gen->refcount == 1)
 	{
 		g_hash_table_destroy(gen->tables);
-		g_rw_lock_clear(gen->rw_lock);
+		g_rw_lock_clear(&(gen->rw_lock));
 	}
 
 }
@@ -641,7 +650,6 @@ FREEQ_EXPORT struct freeq_table *freeq_table_unref(struct freeq_table *table)
 	return NULL;
 }
 
-
 FREEQ_EXPORT struct freeq_ctx *freeq_table_get_ctx(struct freeq_table *table)
 {
 	return table->ctx;
@@ -751,6 +759,10 @@ FREEQ_EXPORT int freeq_table_new_fromcols(struct freeq_ctx *ctx,
 	t->refcount = 1;
 	t->ctx = ctx;
 	t->strings = strchnk;
+
+	for (int i = 0; i < numcols; i++)
+		t->columns[i].data = NULL;
+
 	if (t->strings == NULL)
 		t->strings = g_string_chunk_new(DEFAULT_STRCHUNK_LENGTH);
 	*table = t;
@@ -911,7 +923,7 @@ FREEQ_EXPORT int freeq_table_sendto_ssl(struct freeq_ctx *freeqctx, struct freeq
 	if (freeq_init_ssl(freeqctx))
 		exit(1);
 
-	conn = BIO_new_connect("localhost:13000");
+	conn = BIO_new_connect("localhost:13001");
 	if (!conn)
 		int_error("Error creating connection BIO") ;
 
