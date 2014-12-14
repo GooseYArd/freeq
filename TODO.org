@@ -1,5 +1,12 @@
-* TODO aggregator   
+* TODO to_db is not being run
+  to_db used to be called after merging a table in receiver()
+  we probably need to create a separate thread now that handles the to_db and generation rotation stuff
+
+* TODO it seems wrong to have freeq_ctx in conn_ctx, if state is already there. How are they related?
+
+* TODO to_db should be in libfreeq.c
+
+* TODO aggregator
 ** TODO read list of IPs to invite
- 
 * TODO staticinfo/tableprov
 * TODO jsoninfo
