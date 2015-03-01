@@ -28,7 +28,7 @@ static const struct option longopts[] = {
         {NULL, 0, NULL, 0}
 };
 
-freeq_coltype_t coltypes[] = {        
+freeq_coltype_t coltypes[] = {
         FREEQ_COL_STRING,
         FREEQ_COL_NUMBER,
         FREEQ_COL_STRING,
@@ -46,17 +46,17 @@ freeq_coltype_t coltypes[] = {
 
 const char *colnames[] = {
         "machineip",
-        "pid",      
-        "command",  
-        "pcpu",     
-        "state",    
-        "priority", 
-        "nice",     
-        "rss",      
-        "vsize",    
-        "euid",     
-        "egid",     
-        "ruid",     
+        "pid",
+        "command",
+        "pcpu",
+        "state",
+        "priority",
+        "nice",
+        "rss",
+        "vsize",
+        "euid",
+        "egid",
+        "ruid",
         "rgid"
 };
 
@@ -77,7 +77,7 @@ void procnothread(const char *machineip)
         struct freeq_table *tbl;
         proc_t proc_info;
         int err;
-        
+
         fprintf(stderr, "machine ip is %s\n", machineip);
 
         err = freeq_new(&ctx, "system_monitor", machineip);
@@ -85,24 +85,24 @@ void procnothread(const char *machineip)
                 exit(EXIT_FAILURE);
 
         freeq_set_identity(ctx, machineip);
-	freeq_set_log_priority(ctx, 10);
+        /*freeq_set_log_priority(ctx, 10);*/
 
-        GSList *machineips = NULL, 
-                *cmds = NULL, 
-                *pids = NULL, 
-                *pcpu = NULL, 
-                *state = NULL, 
+        GSList *machineips = NULL,
+                *cmds = NULL,
+                *pids = NULL,
+                *pcpu = NULL,
+                *state = NULL,
                 *priority = NULL,
                 *nice = NULL,
-                *rss = NULL, 
-                *vsize = NULL, 
-                *euid = NULL, 
-                *egid = NULL, 
-                *ruid = NULL, 
-                *rgid = NULL;        
+                *rss = NULL,
+                *vsize = NULL,
+                *euid = NULL,
+                *egid = NULL,
+                *ruid = NULL,
+                *rgid = NULL;
         PROCTAB* proc = openproc(PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLSTATUS);
         memset(&proc_info, 0, sizeof(proc_info));
-       
+
         while (readproc(proc, &proc_info) != NULL) {
                 cmds = g_slist_append(cmds, proc_info.cmd);
                 pids = g_slist_append(pids, GINT_TO_POINTER(proc_info.ppid));
@@ -118,12 +118,12 @@ void procnothread(const char *machineip)
                 rgid = g_slist_append(rgid, GINT_TO_POINTER(proc_info.rgid));
                 machineips = g_slist_append(machineips, "1.2.3.4");
         }
-        
-        err = freeq_table_new(ctx, 
-                              "procnothread", 
+
+        err = freeq_table_new(ctx,
+                              "procnothread",
                               12,
-                              (freeq_coltype_t *)&coltypes, 
-                              (const char **)&colnames, 
+                              (freeq_coltype_t *)&coltypes,
+                              (const char **)&colnames,
                               &tbl,
                               0,
                               machineips,
@@ -134,15 +134,16 @@ void procnothread(const char *machineip)
                               priority,
                               nice,
                               rss,
-                              vsize, 
+                              vsize,
                               euid,
-                              egid, 
+                              egid,
                               ruid,
                               rgid);
 
         if (err < 0)
                 exit(EXIT_FAILURE);
- 
+
+        freeq_table_print(ctx, tbl, stdout);
         freeq_table_sendto_ssl(ctx, tbl);
         freeq_table_unref(tbl);
         closeproc(proc);

@@ -57,7 +57,7 @@ EXTRA_DIST = \
 # Subdirectories to descend into.
 SUBDIRS = po
 
-bin_PROGRAMS = freeqd system_monitor freeql
+bin_PROGRAMS = freeqd system_monitor freeql tblsend
 
 lib_LTLIBRARIES = \
 	libfreeq-1.0.la
@@ -104,6 +104,13 @@ ssl_client_SOURCES = src/ssl_client.c src/system.h
 freeqd_SOURCES = src/freeqd.c src/system.h
 freeql_SOURCES = src/freeql.cc src/system.h
 system_monitor_SOURCES = src/system_monitor.c src/system.h
+tblsend_SOURCES = src/tblsend.c
+
+tblsend_LDADD = \
+	$(LIBINTL) \
+	$(top_builddir)/lib/libfreeq.la \
+	libfreeq-1.0.la \
+	$(GLIB_LIBS)
 
 system_monitor_LDADD = \
 	$(LIBINTL) \

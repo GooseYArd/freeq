@@ -102,10 +102,10 @@ struct freeq_column {
 struct freeq_table {
 	struct freeq_ctx *ctx;
 	int refcount;
-	int numrows;
+	uint32_t numrows;
 	char *name;
 	char *identity;
-	int numcols;
+	uint32_t numcols;
 	bool destroy_data;
 	GStringChunk *strings;
 	GHashTable *senders;

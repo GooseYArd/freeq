@@ -874,7 +874,8 @@ BIO *b;
 				}
 				else if (slen < 0)
 				{
-					dbg(ctx, "negative offset %d list length is %d, value at offset is %s\n", slen, g_slist_length(coldata[j]), g_slist_nth_data(coldata[j], -slen -1));
+					dbg(ctx, "negative offset %d list length is %d, value at offset is %s\n",
+					    slen, g_slist_length(coldata[j]), g_slist_nth_data(coldata[j], -slen -1));
 					coldata[j] = g_slist_prepend(coldata[j], g_slist_nth_data(coldata[j], -slen -1));
 				}
 				else
@@ -967,6 +968,42 @@ FREEQ_EXPORT int freeq_table_sendto_ssl(struct freeq_ctx *freeqctx, struct freeq
 	SSL_free(ssl);
 	//SSL_CTX_free(sslctx);
 	return 0;
+}
+
+FREEQ_EXPORT int freeq_read_tablefile(ctx, stream, tbl)
+struct freeq_ctx *ctx;
+FILE *stream;
+struct freeq_table *tbl;
+{
+	char *line = NULL;
+	ssize_t read;
+	size_t len = 0;
+	unsigned serial;
+	int res;
+
+	fscanf(stream, "%d\n", &serial);
+
+	/* read = getline(&line, &len, stream)); */
+
+	/* int err = freeq_table_new_fromcols(ctx, */
+	/*				   name, */
+	/*				   numcols, */
+	/*				   &tbl, */
+	/*				   strchnk, */
+	/*				   true); */
+	/* if (err) */
+	/* { */
+	/*	dbg(ctx, "freeq_table_new_fromcols failed!\n"); */
+	/*	free(identity); */
+	/*	free(name); */
+	/*	return -ENOMEM; */
+	/* } */
+	/* while ((read = getline(&line, &len, stream)) != -1) { */
+	/*	printf("Retrieved line of length %zu :\n", read); */
+	/*	printf("%s", line); */
+	/* } */
+	/* return 0; */
+
 }
 
 FREEQ_EXPORT int freeq_table_bio_write(ctx, t, b)
@@ -1100,14 +1137,14 @@ FREEQ_EXPORT void freeq_table_print(struct freeq_ctx *ctx, struct freeq_table *t
 	for (int j=0; j < t->numcols; j++)
 		fprintf(of, "%s%s", coltypes[t->columns[j].coltype], j < t->numcols - 1 ? ", " : "\n");
 
-	for (int i=0; i < t->numrows; i++)
+	for (uint32_t i=0; i < t->numrows; i++)
 	{
-		for (int j=0; j < t->numcols; j++)
+		for (uint32_t j=0; j < t->numcols; j++)
 		{
 			switch (t->columns[j].coltype)
 			{
 			case FREEQ_COL_STRING:
-				fprintf(of, "%s", colp[j]->data);
+				fprintf(of, "%s", colp[j]->data == NULL ? "null" : colp[j]->data);
 				break;
 			case FREEQ_COL_NUMBER:
 				fprintf(of, "%d", GPOINTER_TO_INT(colp[j]->data));

@@ -48,7 +48,7 @@ thread_info_t pthread_info;
 sqlite4 *pDb;
 
 struct freeqd_state {
-	freeq_generation_t **current;
+	freeq_generation_t *current;
 	GRWLock rw_lock;
 };
 
@@ -163,7 +163,7 @@ int generation_table_merge(struct freeq_ctx *ctx, struct freeqd_state *fst, BIO 
 {
 	struct freeq_table *tbl;
 	struct freeq_table *curtbl;
-	freeq_generation_t *gen = *(fst->current);
+	freeq_generation_t *gen = fst->current;
 	int err;
 
 	/* this needs to be moved outside this function */
@@ -173,6 +173,8 @@ int generation_table_merge(struct freeq_ctx *ctx, struct freeqd_state *fst, BIO 
 		dbg(ctx, "unable to read tabledata\n");
 		return err;
 	}
+
+	freeq_table_print(ctx, tbl, stdout);
 
 	/* if we need to be able to replace node/tables in a
 	 * generation, another option would be to use a tree instead
@@ -281,8 +283,7 @@ void* conn_handler(void *arg)
 
 	if ((err = post_connection_check(ssl, "localhost")) != X509_V_OK)
 	{
-		fprintf(stderr, "-Error: peer certificate: %s\n",
-			X509_verify_cert_error_string(err));
+		err(ctx->freeqctx, "-Error: peer certificate: %s\n", X509_verify_cert_error_string(err));
 		int_error("Error checking SSL object after connection");
 	}
 
@@ -292,19 +293,19 @@ void* conn_handler(void *arg)
 	BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE);
 	BIO_push(buf_io, ssl_bio);
 
-	fprintf(stderr, "SSL Connection opened\n");
+	dbg(ctx->freeqctx, "ssl client connection opened\n");
 	if (generation_table_merge(ctx->freeqctx, ctx->fst, buf_io))
 	{
-		fprintf(stderr, "table merge failed\n");
+		err(ctx->freeqctx, "table merge failed\n");
 		SSL_shutdown(ssl);
 	}
 	else
 	{
-		fprintf(stderr, "table merged ok\n");
+		dbg(ctx->freeqctx, "table merged ok\n");
 		SSL_clear(ssl);
 	}
 
-	fprintf(stderr, "SSL Connection closed\n");
+	dbg(ctx->freeqctx, "ssl client connection closed\n");
 	SSL_free(ssl);
 
 	ERR_remove_state(0);
@@ -400,9 +401,9 @@ int table_ddl(struct freeq_ctx *ctx, struct freeq_table *tbl, GString *stm)
 				       freeq_sqlite_typexpr[tbl->columns[i].coltype],
 				       i < (tbl->numcols - 1) ? "," : "");
 	}
-	//stm << ");";
-	stm = g_string_append(stm, ");");
-	dbg(ctx, "%s\n", stm);
+
+	g_string_append(stm, ");");
+	dbg(ctx, "table_ddl sql: %s\n", stm->str);
 	return 0;
 }
 
@@ -419,26 +420,32 @@ int gen_to_db(struct freeq_ctx *ctx, freeq_generation_t *g, sqlite4 *mDb)
 {
 	GHashTableIter iter;
 	guint size = g_hash_table_size(g->tables);
-
-	uint32_t *val;
-	uint32_t *key_;
+	gpointer key, val;
+	struct freeq_table *t;
 
 	g_hash_table_iter_init(&iter, g->tables);
-	while (g_hash_table_iter_next(&iter, (gpointer) &key_, (gpointer) &val))
+	while (g_hash_table_iter_next(&iter, &key, &val))
 	{
-		printf("key %u ---> %u\n", (uint32_t)*key_, (uint32_t)*val);
+		dbg(ctx, "replacing table %s\n", key);
+		t = (struct freeq_table *)val;
+		if (tbl_to_db(ctx, t, mDb))
+		{
+			err(ctx, "gen_to_db failed to publish %s", key);
+		}
+		else
+		{
+			dbg(ctx, "published %s", key);
+		}
 	}
-
 	return 0;
-
 }
 
-int tb_to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
+int tbl_to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 {
 	sqlite4_stmt *stmt;
 	GString *sql = g_string_sized_new(255);
-
 	GSList *colp[tbl->numcols];
+
 	memset(colp, 0, tbl->numcols * sizeof(GSList *) );
 	for (int j = 0; j < tbl->numcols; j++)
 		colp[j] = tbl->columns[j].data;
@@ -447,20 +454,22 @@ int tb_to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 	int *intarrp = NULL;
 	int res;
 
+	freeq_table_print(ctx, tbl, stdout);
+
 	if (sqlite4_exec(mDb, "BEGIN TRANSACTION;", NULL, NULL) != SQLITE4_OK)
 	{
-		dbg(ctx, "unable to start transaction\n");
+		dbg(ctx, "unable to start transaction: %s\n", sqlite4_errmsg(mDb));
 		return 1;
 	}
 
 	g_string_printf(sql, "DROP TABLE %s;", tbl->name);
 	if (sqlite4_exec(mDb, sql->str, NULL, NULL) != SQLITE4_OK)
-		dbg(ctx, "failed to drop table, ignoring");
+		dbg(ctx, "failed to drop table, ignoring\n");
 
 	table_ddl(ctx, tbl, sql);
 	if (sqlite4_exec(mDb, sql->str, NULL, NULL) != SQLITE4_OK)
 	{
-		dbg(ctx, "failed to create table, rolling back");
+		dbg(ctx, "failed to create table, rolling back\n");
 		sqlite4_exec(mDb, "ROLLBACK;", NULL, NULL);
 		g_string_free(sql, 1);
 		return 1;
@@ -469,31 +478,35 @@ int tb_to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 	ddl_insert(ctx, tbl, sql);
 	if (sqlite4_prepare(mDb, sql->str, sql->len, &stmt, NULL) != SQLITE4_OK)
 	{
-		dbg(ctx, "failed to create statement (%d), rolling back", res);
+		dbg(ctx, "failed to create statement (%d), rolling back\n", res);
 		sqlite4_exec(mDb, "ROLLBACK;", NULL, NULL);
 		g_string_free(sql,1);
 		return 1;
 	}
 
 	g_string_free(sql,1);
-	for (unsigned i = 0; i < tbl->numrows; i++)
+	for (uint32_t i = 0; i < tbl->numrows; i++)
 	{
-		for (int j = 0; j < tbl->numcols; j++)
+		for (uint32_t j = 0; j < tbl->numcols; j++)
 		{
-			switch (tbl->columns[i].coltype)
+			switch (tbl->columns[j].coltype)
 			{
 			case FREEQ_COL_STRING:
-				sqlite4_bind_text(stmt, j, colp[j]->data, strlen(colp[j]->data), SQLITE4_TRANSIENT, NULL);
+				sqlite4_bind_text(stmt,
+						  j+1,
+						  colp[j]->data == NULL ? "" : colp[j]->data,
+						  colp[j]->data == NULL ? 0 : strlen(colp[j]->data),
+						  SQLITE4_TRANSIENT, NULL);
 				if (res != SQLITE4_OK)
 				{
-					dbg(ctx, "failed bind: %s", sqlite4_errmsg(mDb));
+					dbg(ctx, "row %d failed binding string column %d %s: %s\n", i, j, colp[j]->data, sqlite4_errmsg(mDb));
 				}
 				break;
 			case FREEQ_COL_NUMBER:
 				res = sqlite4_bind_int(stmt, j, GPOINTER_TO_INT(colp[j]->data));
 				if (res != SQLITE4_OK)
 				{
-					dbg(ctx, "failed bind: %s", sqlite4_errmsg(mDb));
+					dbg(ctx, "row %d failed bind: %s\n", i, sqlite4_errmsg(mDb));
 				}
 				break;
 			default:
@@ -523,15 +536,14 @@ void *status_logger (void *arg)
 	struct conn_ctx *ctx = (struct conn_ctx *)arg;
 	freeq_generation_t *curgen;
 
-	printf("STATUS_LOGGER STARTING\n");
+	dbg(ctx->freeqctx, "status_logger starting\n");
 	time_t dt;
 	while (1)
 	{
 		sleep(5);
-		//dbg(ctx->freeqctx, "mark\n");
-		curgen = *(ctx->fst->current);
+		curgen = ctx->fst->current;
 		dt = time(NULL) - curgen->era;
-		if (dt > 30)
+		if (dt > 10)
 		{
 			freeq_generation_t *newgen;
 			dbg(ctx->freeqctx, "generation is ready to publish\n");
@@ -543,16 +555,14 @@ void *status_logger (void *arg)
 
 			/* advance generation, take pointer to previous generation */
 			g_rw_lock_writer_lock(&(ctx->fst->rw_lock));
-			ctx->fst->current = &newgen;
+			ctx->fst->current = newgen;
 			g_rw_lock_writer_unlock(&(ctx->fst->rw_lock));
 
-			g_rw_lock_writer_lock(&(curgen->rw_lock));
-
-			g_rw_lock_writer_unlock(&(curgen->rw_lock));
-
 			/* to_db on previous generation */
+			g_rw_lock_writer_lock(&(curgen->rw_lock));
+			gen_to_db(ctx->freeqctx, curgen, ctx->pDb);
+			g_rw_lock_writer_unlock(&(curgen->rw_lock));
 			/* free previous generation */
-
 
 		} else {
 			dbg(ctx->freeqctx, "generation age is %d\n", dt);
@@ -656,6 +666,7 @@ void* sqlhandler(void *paramsd) {
 	sqlite4_stmt *pStmt;
 	socklen_t addr_len;
 	int segment_size = 2000;
+	int i;
 
 	BIO *out;
 	//BIO_free(out);
@@ -680,8 +691,10 @@ void* sqlhandler(void *paramsd) {
 	{
 		res = readline(client_local, line, MAX_MSG);
 		dbg(ctx, "received query from client: \"%s\" res=%d\n", line, res);
-		if (res == 0)
+		if (res == 0) {
+			printf("zero res from readnf\n");
 			break;
+		}
 
 		if (res == 2)
 			continue;
@@ -689,49 +702,52 @@ void* sqlhandler(void *paramsd) {
 		res = sqlite4_prepare(pDb, line, strlen(line), &pStmt, 0);
 		if (res != SQLITE4_OK)
 		{
-			dbg(ctx, "prepare failed, sending error, res was %d\n", res);
+			dbg(ctx, "prepare failed for %s sending error, res was %d\n", line, res);
 			//freeq_error_write_sock(ctx, sqlite4_errmsg(pDb), client_local);
 			dbg(ctx, sqlite4_errmsg(pDb));
 			BIO_printf(out, "error: %s\n", sqlite4_errmsg(pDb));
 			sqlite4_finalize(pStmt);
 			continue;
 		}
-		BIO_write(out, "statement prepared\n", 20);
+
 		/* column type is unset until the query has been
 		 * stepped once */
 		if (sqlite4_step(pStmt) != SQLITE4_ROW)
 		{
+			dbg(ctx, "repsonse from first step was not SQLITE4_ROW...");
 			//freeq_error_write_sock(ctx, sqlite4_errmsg(pDb), client_local);
 			sqlite4_finalize(pStmt);
 			continue;
 		}
 
-		if (!tblp)
-		{
-			dbg(ctx, "unable to allocate table\n");
-			//freeq_error_write_sock(ctx, "ENOMEM", client_local);
-			sqlite4_finalize(pStmt);
-			continue;
-		}
-
 		int numcols = sqlite4_column_count(pStmt);
-		dbg(ctx, "creating response table %s, %d columns\n", tblp->name, numcols);
-		int j = 0;
+		dbg(ctx, "response will include %d columns\n", numcols);
+		int ctypes[numcols];
 
-		for (int i = 0; i < numcols; i++)
+		for (i = 0; i < numcols; i++)
 		{
-			sqlite4_column_name(pStmt, i);
-			freeq_coltype_t ctype = sqlite_to_freeq_coltype[sqlite4_column_type(pStmt, i)];
+			//ctypes[i] = sqlite_to_freeq_coltype[sqlite4_column_type(pStmt, i)];
+			ctypes[i] = sqlite4_column_type(pStmt, i);
 		}
 
-		do {
-			BIO_write(out, "row\n", 4);
-		} while (sqlite4_step(pStmt) == SQLITE4_ROW);
+		do
+		{
+			for (i = 0; i < numcols; i++)
+			{
+				/* switch (ctypes[i]) */
+				/* { */
+				/* case FREEQ_COL_STRING: */
+				/*	const char *zDetail = (const char *)sqlite4_column_text(pExplain, 3, 0); */
+				/* case FREEQ_COL_NUMBER: */
+				/*	int iSelectid = sqlite4_column_int(pStmt, 0); */
 
-		//dbg(ctx, "setting table, length %d\n", tblp->numrows);
+
+			}
+		}
+		while (SQLITE4_ROW == sqlite4_step(pStmt));
+
 		sqlite4_finalize(pStmt);
-		dbg(ctx, "sending result");
-		//freeq_table_write_sock(ctx, tblp, client_local);
+		dbg(ctx, "sending result\n");
 		memset(line, 0, MAX_MSG);
 		freeq_table_unref(tblp);
 		sleep(1);
@@ -816,7 +832,7 @@ int init_freeqd_state(struct freeq_ctx *freeqctx, struct freeqd_state *s)
 		//exit(EXIT_FAILURE);
 	}
 	g_rw_lock_init(&(s->rw_lock));
-	s->current = &fgen;
+	s->current = fgen;
 }
 
 int
@@ -872,14 +888,6 @@ main (int argc, char *argv[])
 
 	init_freeqd_state(freeqctx, &fst);
 
-	struct conn_ctx status_ctx;
-	status_ctx.ssl = ssl;
-	status_ctx.pDb = pDb;
-	status_ctx.fst = &fst;
-	status_ctx.freeqctx = freeqctx;
-	struct conn_ctx *sctx = &status_ctx;
-	pthread_create(&t_status_logger, 0, &status_logger, sctx);
-
 	dbg(freeqctx, "reading clients file\n");
 	if (control_readfile(&clients,(char *)"control/clients",1))
 	{
@@ -889,12 +897,21 @@ main (int argc, char *argv[])
 		res = sqlite4_open(0, "ondisk.db", &pDb, SQLITE4_OPEN_READWRITE | SQLITE4_OPEN_CREATE,NULL);
 		if (res != SQLITE4_OK)
 		{
-			fprintf(stderr, "failed to open in-memory db\n");
+			err(freeqctx, "failed to open in-memory db\n");
 			exit(res);
 		}
 	} else {
 		dbg(freeqctx, "failed to read clients file, database not initialized\n");
 	}
+
+	struct conn_ctx status_ctx;
+	status_ctx.ssl = ssl;
+	status_ctx.pDb = pDb;
+	status_ctx.fst = &fst;
+	status_ctx.freeqctx = freeqctx;
+	struct conn_ctx *sctx = &status_ctx;
+	pthread_create(&t_status_logger, 0, &status_logger, sctx);
+
 	//if (control_readfile(&clients,"",1) != 1)
 	//	pthread_create(&t_receiver, 0, &receiver, (void *)&ri);
 	//	pthread_create(&t_recvinvite, 0, &recvinvite, (void *)recvinvite_nnuri);
@@ -904,11 +921,11 @@ main (int argc, char *argv[])
 	sqlctx.pDb = pDb;
 	pthread_create(&t_sqlserver, 0, &sqlserver, (void *)&sqlctx);
 
-//	res = sqlite4_exec(pDb, "create table if not exists freeq_stats(int last);", log_monitor, NULL);
-//	if (res != SQLITE4_OK)
-//	{
-//		printf("creating freeq_stats failed: %d %s\n", res, sqlite4_errmsg(pDb));
-//	}
+	res = sqlite4_exec(pDb, "create table if not exists freeq_stats(int last);", NULL, NULL);
+	if (res != SQLITE4_OK)
+	{
+		printf("creating freeq_stats failed: %d %s\n", res, sqlite4_errmsg(pDb));
+	}
 
 	dbg(freeqctx, "initializing SSL mutexes\n");
 	mutex_buf = (pthread_mutex_t *)malloc(CRYPTO_num_locks() *sizeof(pthread_mutex_t));
