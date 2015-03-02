@@ -71,9 +71,10 @@ int readserial(FILE *f, int *serial)
         ssize_t r = 0;
         char *lbuf = NULL;
         int res = 0;
+
         if (getline(&lbuf, &r, f))
         {
-                if (sscanf(lbuf, "%d", serial) != 1)
+                if (sscanf(trim(lbuf), "%d", serial) != 1)
                         res = -1;
         } else {
                 res = -1;
@@ -267,7 +268,7 @@ void pubtbl(const char *fn)
                 exit(EXIT_FAILURE);
 
         tbl->serial = serial;
-        dbg(ctx, "allocated table\n");
+        dbg(ctx, "allocated table, serial %d\n", serial);
         if (readcolnames(f, tbl) != 0)
                 exit(EXIT_FAILURE);
 
