@@ -434,7 +434,7 @@ int gen_to_db(struct freeq_ctx *ctx, freeq_generation_t *g, sqlite4 *mDb)
 		}
 		else
 		{
-			dbg(ctx, "published %s", key);
+			dbg(ctx, "published %s\n", key);
 		}
 	}
 	return 0;
@@ -492,14 +492,15 @@ int tbl_to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 			switch (tbl->columns[j].coltype)
 			{
 			case FREEQ_COL_STRING:
-				sqlite4_bind_text(stmt,
-						  j+1,
-						  colp[j]->data == NULL ? "" : colp[j]->data,
-						  colp[j]->data == NULL ? 0 : strlen(colp[j]->data),
-						  SQLITE4_TRANSIENT, NULL);
+				res = sqlite4_bind_text(stmt,
+							j+1,
+							colp[j]->data == NULL ? "" : colp[j]->data,
+							colp[j]->data == NULL ? 0 : strlen(colp[j]->data),
+							SQLITE4_TRANSIENT, NULL);
 				if (res != SQLITE4_OK)
 				{
-					dbg(ctx, "row %d failed binding string column %d %s: %s\n", i, j, colp[j]->data, sqlite4_errmsg(mDb));
+					dbg(ctx, "stmt: %s\n", stmt);
+					dbg(ctx, "row %d failed binding string column %d %s: %s (%d)\n", i, j, colp[j]->data, sqlite4_errmsg(mDb), res);
 				}
 				break;
 			case FREEQ_COL_NUMBER:
@@ -529,6 +530,7 @@ int tbl_to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 	res = sqlite4_exec(mDb, "COMMIT TRANSACTION;", NULL, NULL);
 	dbg(ctx, "result of commit was %d\n", res);
 	sqlite4_finalize(stmt);
+	return 0;
 }
 
 void *status_logger (void *arg)
@@ -748,6 +750,7 @@ void* sqlhandler(void *paramsd) {
 
 		sqlite4_finalize(pStmt);
 		dbg(ctx, "sending result\n");
+
 		memset(line, 0, MAX_MSG);
 		freeq_table_unref(tblp);
 		sleep(1);
