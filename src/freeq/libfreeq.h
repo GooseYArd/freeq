@@ -103,6 +103,7 @@ struct freeq_table {
 	struct freeq_ctx *ctx;
 	int refcount;
 	uint32_t numrows;
+	uint32_t serial;
 	char *name;
 	char *identity;
 	uint32_t numcols;

@@ -110,7 +110,10 @@ tblsend_LDADD = \
 	$(LIBINTL) \
 	$(top_builddir)/lib/libfreeq.la \
 	libfreeq-1.0.la \
-	$(GLIB_LIBS)
+	$(GLIB_LIBS) \
+	-lssl \
+	-lcrypto \
+	$(OPENSSL_LIBS)
 
 system_monitor_LDADD = \
 	$(LIBINTL) \

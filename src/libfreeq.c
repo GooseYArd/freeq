@@ -888,7 +888,9 @@ BIO *b;
 				break;
 			case FREEQ_COL_NUMBER:
 				dezigzag64(&(r.s));
-				dbg(ctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " pos %d\n", i,j, r.i, prev[j] + r.i, pos);
+				dbg(ctx, "prev[%d]: %d\n", j, prev[j]);
+				dbg(ctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " pos %d\n",
+					   i, j,          r.i,               prev[j] + r.i, pos);
 				prev[j] = prev[j] + r.i;
 				coldata[j] = g_slist_prepend(coldata[j], GINT_TO_POINTER(prev[j]));
 				break;
@@ -970,42 +972,6 @@ FREEQ_EXPORT int freeq_table_sendto_ssl(struct freeq_ctx *freeqctx, struct freeq
 	return 0;
 }
 
-FREEQ_EXPORT int freeq_read_tablefile(ctx, stream, tbl)
-struct freeq_ctx *ctx;
-FILE *stream;
-struct freeq_table *tbl;
-{
-	char *line = NULL;
-	ssize_t read;
-	size_t len = 0;
-	unsigned serial;
-	int res;
-
-	fscanf(stream, "%d\n", &serial);
-
-	/* read = getline(&line, &len, stream)); */
-
-	/* int err = freeq_table_new_fromcols(ctx, */
-	/*				   name, */
-	/*				   numcols, */
-	/*				   &tbl, */
-	/*				   strchnk, */
-	/*				   true); */
-	/* if (err) */
-	/* { */
-	/*	dbg(ctx, "freeq_table_new_fromcols failed!\n"); */
-	/*	free(identity); */
-	/*	free(name); */
-	/*	return -ENOMEM; */
-	/* } */
-	/* while ((read = getline(&line, &len, stream)) != -1) { */
-	/*	printf("Retrieved line of length %zu :\n", read); */
-	/*	printf("%s", line); */
-	/* } */
-	/* return 0; */
-
-}
-
 FREEQ_EXPORT int freeq_table_bio_write(ctx, t, b)
 struct freeq_ctx *ctx;
 struct freeq_table *t;
@@ -1021,7 +987,8 @@ BIO *b;
 	// use a union here
 	GHashTable *strtbls[t->numcols];
 	uint64_t prev[t->numcols];
-	memset(prev, t->numcols, 0);
+
+	memset(prev, 0, sizeof(prev));
 	GSList *colnxt[t->numcols];
 
 	slen = strlen(t->name);
@@ -1097,6 +1064,7 @@ BIO *b;
 			case FREEQ_COL_NUMBER:
 				num = GPOINTER_TO_INT(colnxt[j]->data);
 				pos += BIO_write_varintsigned(b, (int64_t)num - prev[j]);
+				dbg(ctx, "prev[%d]: %d\n", j, prev[j]);
 				dbg(ctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " pos %d\n", i,j, num, (int64_t)num-prev[j], pos);
 				prev[j] = num;
 				break;
@@ -1129,6 +1097,7 @@ FREEQ_EXPORT void freeq_table_print(struct freeq_ctx *ctx, struct freeq_table *t
 		colp[j] = t->columns[j].data;
 
 	//fprintf(of, "%s\n", t->identity);
+	fprintf(of, "%d\n", t->serial);
 	fprintf(of, "%s\n", t->name);
 
 	for (int j=0; j < t->numcols; j++)
