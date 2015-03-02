@@ -241,7 +241,7 @@ encode_varintsigned(varint_buf_t *buffer, int64_t n)
 	return encode_varint(buffer,n);
 }
 
-int
+FREEQ_EXPORT int
 BIO_write_varint32(BIO *b, uint32_t number)
 {
 	varint32_buf_t buf;
@@ -249,7 +249,7 @@ BIO_write_varint32(BIO *b, uint32_t number)
 	BIO_write(b, &buf, len);
 }
 
-int
+FREEQ_EXPORT int
 BIO_write_varint(BIO *b, uint64_t number)
 {
 	varint_buf_t buf;

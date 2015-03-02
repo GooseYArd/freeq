@@ -416,30 +416,6 @@ int ddl_insert(struct freeq_ctx *ctx, struct freeq_table *tbl, GString *stm)
 	dbg(ctx, "statement: %s\n", stm->str);
 }
 
-int gen_to_db(struct freeq_ctx *ctx, freeq_generation_t *g, sqlite4 *mDb)
-{
-	GHashTableIter iter;
-	guint size = g_hash_table_size(g->tables);
-	gpointer key, val;
-	struct freeq_table *t;
-
-	g_hash_table_iter_init(&iter, g->tables);
-	while (g_hash_table_iter_next(&iter, &key, &val))
-	{
-		dbg(ctx, "replacing table %s\n", key);
-		t = (struct freeq_table *)val;
-		if (tbl_to_db(ctx, t, mDb))
-		{
-			err(ctx, "gen_to_db failed to publish %s", key);
-		}
-		else
-		{
-			dbg(ctx, "published %s\n", key);
-		}
-	}
-	return 0;
-}
-
 int tbl_to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 {
 	sqlite4_stmt *stmt;
@@ -530,6 +506,30 @@ int tbl_to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 	res = sqlite4_exec(mDb, "COMMIT TRANSACTION;", NULL, NULL);
 	dbg(ctx, "result of commit was %d\n", res);
 	sqlite4_finalize(stmt);
+	return 0;
+}
+
+int gen_to_db(struct freeq_ctx *ctx, freeq_generation_t *g, sqlite4 *mDb)
+{
+	GHashTableIter iter;
+	guint size = g_hash_table_size(g->tables);
+	gpointer key, val;
+	struct freeq_table *t;
+
+	g_hash_table_iter_init(&iter, g->tables);
+	while (g_hash_table_iter_next(&iter, &key, &val))
+	{
+		dbg(ctx, "replacing table %s\n", key);
+		t = (struct freeq_table *)val;
+		if (tbl_to_db(ctx, t, mDb))
+		{
+			err(ctx, "gen_to_db failed to publish %s", key);
+		}
+		else
+		{
+			dbg(ctx, "published %s\n", key);
+		}
+	}
 	return 0;
 }
 
@@ -660,6 +660,8 @@ void* sqlhandler(void *paramsd) {
 	const char *s;
 	char **strings;
 	int *vals;
+	unsigned int pos = 0;
+	int slen = 0;
 
 	struct freeq_table *tblp;
 	struct freeq_column *colp;
@@ -671,8 +673,6 @@ void* sqlhandler(void *paramsd) {
 	int i;
 
 	BIO *out;
-	//BIO_free(out);
-
 	client_local = *((int *)paramsd);
 	addr_len = sizeof(cliAddr);
 
@@ -732,17 +732,60 @@ void* sqlhandler(void *paramsd) {
 			ctypes[i] = sqlite4_column_type(pStmt, i);
 		}
 
+		GHashTable *strtbls[numcols];
+		uint64_t prev[numcols];
+		memset(prev, 0, sizeof(prev));
+
+		slen = strlen("result");
+		pos += BIO_write_varint32(out, slen);
+		pos += BIO_write(out, "result", slen);
+
+		slen = strlen("identity");
+		pos += BIO_write_varint32(out, slen);
+		pos += BIO_write(out, "identity", slen);
+		//dbg(ctx, "identity %s write %d\n", ctx->identity, pos);
+
+		pos += BIO_write_varint32(out, numcols);
+		dbg(ctx, "numcols %d write %d\n", numcols, pos);
+
+		for (i=0; i < numcols; i++)
+		{
+			if (ctypes[i] == FREEQ_COL_STRING)
+				strtbls[i] = g_hash_table_new_full(g_str_hash,
+								   g_str_equal,
+								   NULL,
+								   NULL);
+		}
+
+		for (i=0; i < numcols; i++)
+			pos += BIO_write(out, (char *)&(ctypes[i]), sizeof(freeq_coltype_t));
+
+		for (i=0; i < numcols; i++)
+		{
+			const char *name = sqlite4_column_name(pStmt, i);
+			slen = strlen(name);
+			pos += BIO_write_varint32(out, slen);
+			pos += BIO_write(out, name, slen);
+			dbg(ctx, "colname for %d is %s, pos %d\n", i, name, pos);
+		}
+		dbg(ctx, "colnames, pos %d\n", pos);
+
 		do
 		{
 			for (i = 0; i < numcols; i++)
 			{
-				/* switch (ctypes[i]) */
-				/* { */
-				/* case FREEQ_COL_STRING: */
-				/*	const char *zDetail = (const char *)sqlite4_column_text(pExplain, 3, 0); */
-				/* case FREEQ_COL_NUMBER: */
-				/*	int iSelectid = sqlite4_column_int(pStmt, 0); */
-
+				const char *text;
+				switch (ctypes[i])
+				{
+				case FREEQ_COL_STRING:
+					text = sqlite4_column_text(pStmt, i, &slen);
+					pos += BIO_write(out, text, slen);
+					//const char *zDetail = (const char *)sqlite4_column_text(pExplain, 3, 0);
+				case FREEQ_COL_NUMBER:
+					BIO_write_varint(out, sqlite4_column_int(pStmt, i));
+				default:
+					break;
+				}
 
 			}
 		}
