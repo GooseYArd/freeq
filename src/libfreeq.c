@@ -44,7 +44,7 @@
 #include "openssl/ssl.h"
 #include "openssl/err.h"
 
-#define CSEP(j, t) j < t->numcols - 1 ? ", " : "\n"
+#define CSEP(j, t) j < t->numcols - 1 ? "," : "\n"
 #define DEFAULT_STRCHUNK_LENGTH 8
 
 const char *coltypes[] = { "null",
@@ -1101,10 +1101,10 @@ FREEQ_EXPORT void freeq_table_print(struct freeq_ctx *ctx, struct freeq_table *t
 	fprintf(of, "%s\n", t->name);
 
 	for (int j=0; j < t->numcols; j++)
-		fprintf(of, "%s%s", t->columns[j].name, j < t->numcols - 1 ? ", " : "\n");
+		fprintf(of, "%s%s", t->columns[j].name, j < t->numcols - 1 ? "," : "\n");
 
 	for (int j=0; j < t->numcols; j++)
-		fprintf(of, "%s%s", coltypes[t->columns[j].coltype], j < t->numcols - 1 ? ", " : "\n");
+		fprintf(of, "%s%s", coltypes[t->columns[j].coltype], j < t->numcols - 1 ? "," : "\n");
 
 	for (uint32_t i=0; i < t->numrows; i++)
 	{
