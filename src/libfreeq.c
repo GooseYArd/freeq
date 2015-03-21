@@ -254,7 +254,7 @@ BIO_write_varint(BIO *b, uint64_t number)
 	return BIO_write(b, &buf, len);
 }
 
-int
+FREEQ_EXPORT int
 BIO_write_varintsigned32(BIO *b, uint32_t number)
 {
 	varint32_buf_t buf;
@@ -275,10 +275,11 @@ BIO_write_vstr(BIO *b, const char *s)
 {
 	int pos = 0;
 	ssize_t slen;
+	const char zero = 0;
 
 	if (s == NULL)
 	{
-		pos += BIO_write_varint32(b, 0);
+		pos += BIO_write(b, &zero, 1);
 	}
 	else
 	{
@@ -980,18 +981,22 @@ BIO *b;
 		for (int j = 0; j < tbl->numcols; j++)
 		{
 			r.i = 0;
-			read = BIO_read_varint(b, &(r.s));
-			if (read == 0)
+			if (tbl->columns[j].coltype != FREEQ_COL_NULL)
 			{
-				more = 0;
-				break;
+				read = BIO_read_varint(b, &(r.s));
+				if (read == 0)
+				{
+					more = 0;
+					break;
+				}
+				pos += read;
 			}
-			pos += read;
+
 			switch (tbl->columns[j].coltype) {
 			case FREEQ_COL_STRING:
 				dezigzag32(&(r.s));
 				slen = r.i;
-				dbg(ctx, "%d/%d str len %" PRId64 " pos %d\n", i, j, r.i, pos);
+				//dbg(ctx, "%d/%d str len %" PRId64 " pos %d\n", i, j, r.i, pos);
 				if (slen > 0)
 				{
 					pos += BIO_read(b, (char *)&strbuf, slen);
@@ -1014,7 +1019,7 @@ BIO *b;
 				break;
 			case FREEQ_COL_NUMBER:
 				dezigzag64(&(r.s));
-				dbg(ctx, "prev[%d]: %" PRIu64" \n", j, prev[j]);
+				//dbg(ctx, "prev[%d]: %" PRIu64" \n", j, prev[j]);
 				dbg(ctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " pos %d\n",
 					   i, j,          r.i,               prev[j] + r.i, pos);
 				prev[j] = prev[j] + r.i;

@@ -547,7 +547,8 @@ void* sqlhandler(void *arg) {
 	struct freeq_ctx *freeqctx = conn->srvctx->freeqctx;
 	struct freeqd_state *fst = conn->srvctx->fst;
 	BIO *client = conn->client;
-
+	const char zero = 0;
+	gchar *val;
 	unsigned int pos = 0;
 	int slen = 0;
 	sqlite4_stmt *pStmt;
@@ -573,25 +574,25 @@ void* sqlhandler(void *arg) {
 		int_error("Error checking SSL object after connection");
 	}
 
-	BIO  *buf_io, *ssl_bio;
-	buf_io = BIO_new(BIO_f_buffer());
+	BIO *b, *ssl_bio;
+	b = BIO_new(BIO_f_buffer());
 	ssl_bio = BIO_new(BIO_f_ssl());
 	BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE);
-	BIO_push(buf_io, ssl_bio);
+	BIO_push(b, ssl_bio);
 	dbg(freeqctx, "ssl client connection opened\n");
 
 	memset(line, 0, MAX_MSG);
 	dbg(freeqctx, "about to read...\n");
-	ret = BIO_gets(buf_io, line, MAX_MSG);
+	ret = BIO_gets(b, line, MAX_MSG);
 	dbg(freeqctx, "sqlhandler: ret was %d query was %s\n", ret, line);
 
 	ret = sqlite4_prepare(pDb, line, strlen(line), &pStmt, 0);
 	if (ret != SQLITE4_OK)
 	{
 		dbg(freeqctx, "prepare failed for %s sending error, ret was %d\n", line, ret);
-		//freeq_error_write_sock(freeqctx, sqlite4_errmsg(pDb), buf_io);
+		//freeq_error_write_sock(freeqctx, sqlite4_errmsg(pDb), b);
 		dbg(freeqctx, sqlite4_errmsg(pDb));
-		//BIO_printf(buf_io, "error: %s\n", sqlite4_errmsg(pDb));
+		//BIO_printf(b, "error: %s\n", sqlite4_errmsg(pDb));
 		sqlite4_finalize(pStmt);
 		return NULL;
 	}
@@ -601,7 +602,7 @@ void* sqlhandler(void *arg) {
 	if (sqlite4_step(pStmt) != SQLITE4_ROW)
 	{
 		dbg(freeqctx, "repsonse from first step was not SQLITE4_ROW...");
-		//freeq_error_write_sock(freeqctx, sqlite4_errmsg(pDb), buf_io);
+		//freeq_error_write_sock(freeqctx, sqlite4_errmsg(pDb), b);
 		sqlite4_finalize(pStmt);
 		return NULL;
 	}
@@ -630,13 +631,13 @@ void* sqlhandler(void *arg) {
 	memset(prev, 0, sizeof(prev));
 	memset(strtbls, 0, sizeof(strtbls));
 
-	pos += BIO_write_vstr(buf_io, "result");
+	pos += BIO_write_vstr(b, "result");
 	dbg(freeqctx, "name result pos %d\n", pos);
 
-	pos += BIO_write_vstr(buf_io, "identity");
+	pos += BIO_write_vstr(b, "identity");
 	dbg(freeqctx, "identity identity post %d\n", pos);
 
-	pos += BIO_write_varint32(buf_io, numcols);
+	pos += BIO_write_varint32(b, numcols);
 	dbg(freeqctx, "numcols %d pos %d\n", numcols, pos);
 
 	for (int j=0; j < numcols; j++)
@@ -651,7 +652,7 @@ void* sqlhandler(void *arg) {
 
 	for (int j=0; j < numcols; j++)
 	{
-		pos += BIO_write(buf_io,
+		pos += BIO_write(b,
 				 (char *)&(ctypes[j]),
 				 sizeof(freeq_coltype_t));
 		dbg(freeqctx, "coltype for %d is %d, pos %d\n", j,
@@ -661,7 +662,7 @@ void* sqlhandler(void *arg) {
 	for (int j=0; j < numcols; j++)
 	{
 		const char *name = sqlite4_column_name(pStmt, j);
-		pos += BIO_write_vstr(buf_io, name);
+		pos += BIO_write_vstr(b, name);
 		dbg(freeqctx, "colname for %d is %s, pos %d\n", j, name, pos);
 	}
 	dbg(freeqctx, "colnames, pos %d\n", pos);
@@ -670,29 +671,49 @@ void* sqlhandler(void *arg) {
 	{
 		for (int j = 0; j < numcols; j++)
 		{
-			const char *text;
 			uint64_t num = 0;
 			switch (ctypes[j])
 			{
 			case FREEQ_COL_STRING:
-				text = sqlite4_column_text(pStmt, j, &slen);
-				pos += BIO_write_vstr(buf_io, text);
-				//const char *zDetail = (const char *)sqlite4_column_text(pExplain, 3, 0);
+				val = sqlite4_column_text(pStmt, j, &slen);
+				if (val == NULL)
+				{
+					pos += BIO_write(b, &zero, 1);
+					break;
+				}
+				if (g_hash_table_contains(strtbls[j], val))
+				{
+					unsigned int idx = GPOINTER_TO_INT(g_hash_table_lookup(strtbls[j], val));
+					slen = idx - i;
+					pos += BIO_write_varintsigned32(b, slen);
+					dbg(freeqctx, "%d/%d str %s len %d pos %d\n",i,j,val,slen, pos);
+					g_hash_table_replace(strtbls[j], val, GINT_TO_POINTER(i));
+				}
+				else
+				{
+					g_hash_table_insert(strtbls[j], val, GINT_TO_POINTER(i));
+					pos += BIO_write_varintsigned32(b, slen);
+					pos += BIO_write(b, val, slen);
+					dbg(freeqctx, "%d/%d str %s len %d pos %d\n", i,j,val, slen, pos);
+				}
+				break;
 			case FREEQ_COL_NUMBER:
 				num = sqlite4_column_int(pStmt, j);
-				pos += BIO_write_varintsigned(buf_io, (int64_t)num - prev[j]);
+				pos += BIO_write_varintsigned(b, (int64_t)num - prev[j]);
 				dbg(freeqctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " pos %d\n",
-				    i,j, num, (int64_t)num-prev[j], pos);
+				  i,j, num, (int64_t)num-prev[j], pos);
 				prev[j] = num;
+				break;
 			default:
+				dbg(freeqctx, "%d/%d not sending anything for coltype %d\n",i,j, ctypes[j]);
 				break;
 			}
 		}
 		i++;
 	}
-	while (SQLITE4_ROW == sqlite4_step(pStmt));
+	while (SQLITE4_ROW == sqlite4_step(pStmt) && (i <= 10));
 
-	if ((err = BIO_flush(buf_io)) < 0)
+	if ((err = BIO_flush(b)) < 0)
 	{
 		err(freeqctx, "Error flushing BIO");
 	}
