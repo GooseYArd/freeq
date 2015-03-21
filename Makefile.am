@@ -161,7 +161,14 @@ ssl_client_LDADD = \
 	-lcrypto \
 	$(OPENSSL_LIBS)
 
-freeql_LDADD = $(LIBINTL) $(top_builddir)/lib/libfreeq.la libfreeq-1.0.la  $(GLIB_LIBS)
+freeql_LDADD = \
+	$(LIBINTL) \
+	$(top_builddir)/lib/libfreeq.la \
+	libfreeq-1.0.la  \
+	$(GLIB_LIBS) \
+	-lssl \
+	-lcrypto \
+	$(OPENSSL_LIBS)
 
 TESTS = check_basic check_msgpack
 

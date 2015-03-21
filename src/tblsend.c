@@ -20,6 +20,9 @@
 #include "freeq/libfreeq.h"
 #include "libfreeq-private.h"
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 #define NODE0 "node0"
 #define NODE1 "node1"
 
@@ -51,7 +54,7 @@ int countcols(FILE *f)
         char *lbuf = NULL;
         char *p;
         ssize_t r=0;
-        ssize_t rn=0;
+        size_t rn=0;
         int n = -1;
 
         if ((r = getline(&lbuf, &rn, f)) > 0)
@@ -68,7 +71,7 @@ int countcols(FILE *f)
 
 int readserial(FILE *f, int *serial)
 {
-        ssize_t r = 0;
+        size_t r = 0;
         char *lbuf = NULL;
         int res = 0;
 
@@ -85,12 +88,12 @@ int readserial(FILE *f, int *serial)
 
 int readname(FILE *f, char **name)
 {
-        ssize_t n = 0;
+        size_t n = 0;
         ssize_t r = 0;
         char *lbuf = NULL;
 
         int res = 0;
-        if (r = getline(&lbuf, &n, f))
+        if ((r = getline(&lbuf, &n, f)) > 0)
         {
                 *name = strdup(trim(lbuf));
         } else {
@@ -104,7 +107,7 @@ int readcolnames(FILE *f, struct freeq_table *tbl)
 {
         char *lbuf = NULL;
         char *p = NULL;
-        ssize_t r = 0;
+        size_t r = 0;
         ssize_t n = 0;
 
         n = getline(&lbuf, &r, f);
@@ -121,7 +124,7 @@ int readcolnames(FILE *f, struct freeq_table *tbl)
 
 int readcoldata(FILE *f, struct freeq_table *tbl)
 {
-        ssize_t r;
+        size_t r;
         char *tok;
         char *lbuf = NULL;
         bool err;
@@ -144,7 +147,7 @@ int readcoldata(FILE *f, struct freeq_table *tbl)
                                 coldata[j] = g_slist_prepend(coldata[j], strdup(tok));
                                 break;
                         case FREEQ_COL_NUMBER:
-                                if (sscanf(tok, "%d", &nval) != 1)
+                                if (sscanf(tok, "%lu", &nval) != 1)
                                         err = 1;
                                 else
                                         coldata[j] = g_slist_prepend(coldata[j], GUINT_TO_POINTER(nval));
@@ -193,7 +196,7 @@ freeq_coltype_t coltype_from_str(const char *tok)
 
 int readcoltypes(FILE *f, struct freeq_table *tbl)
 {
-        ssize_t r;
+        size_t r;
         char *lbuf = NULL;
         char *tok;
 
@@ -219,18 +222,12 @@ int readcoltypes(FILE *f, struct freeq_table *tbl)
 void pubtbl(const char *fn)
 {
         struct freeq_ctx *ctx;
-        struct freeq_table *tbl, *t2;
+        struct freeq_table *tbl;
         int numcols=1;
         int serial;
         char *tblname;
         int err;
         GStringChunk *strchnk;
-        GSList **coldata;
-        char *s;
-        char *p;
-        char **colnames;
-        struct freeq_column *cols;
-        freeq_coltype_t *coltypes;
 
         err = freeq_new(&ctx, "system_monitor", "tblsend");
         if (err < 0)
@@ -258,11 +255,12 @@ void pubtbl(const char *fn)
         numcols = countcols(f);
         dbg(ctx, "%d columns\n", numcols);
 
+        strchnk = g_string_chunk_new(64);
         err = freeq_table_new_fromcols(ctx,
                                        tblname,
                                        numcols,
                                        &tbl,
-                                       NULL,
+                                       strchnk,
                                        true);
         if (err < 0)
                 exit(EXIT_FAILURE);
@@ -277,30 +275,30 @@ void pubtbl(const char *fn)
                 exit(EXIT_FAILURE);
 
         dbg(ctx, "got column types\n");
-        strchnk = g_string_chunk_new(64);
+
         if (readcoldata(f, tbl) != 0)
         {
-                free(colnames);
-                free(coltypes);
+                freeq_table_unref(tbl);
                 exit(EXIT_FAILURE);
         }
 
         //freeq_table_print(ctx, tbl, stdout);
-        //freeq_table_sendto_ssl(ctx, tbl);
 
-        BIO *out, *in;
-        out = BIO_new_file("poop2.txt", "w");
-        freeq_table_bio_write(ctx, tbl, out);
-        BIO_free(out);
+        freeq_table_sendto_ssl(ctx, tbl);
 
-        in = BIO_new_file("poop2.txt", "r");
-        freeq_table_bio_read(ctx, &t2, in, NULL);
-        BIO_free(in);
+        /* BIO *out, *in; */
+        /* out = BIO_new_file("poop2.txt", "w"); */
+        /* freeq_table_bio_write(ctx, tbl, out); */
+        /* BIO_free(out); */
 
-        freeq_table_print(ctx, t2, stdout);
+        /* in = BIO_new_file("poop2.txt", "r"); */
+        /* freeq_table_bio_read(ctx, &t2, in, NULL); */
+        /* BIO_free(in); */
+
+        /* freeq_table_print(ctx, t2, stdout); */
 
         freeq_table_unref(tbl);
-        freeq_table_unref(t2);
+        //freeq_table_unref(t2);
         freeq_unref(ctx);
 }
 
@@ -309,7 +307,7 @@ main (int argc, char *argv[])
 {
   int optc;
   int lose = 0;
-  const char *node_name = _("unknown");
+  //const char *node_name = _("unknown");
   const char *fn;
 
   set_program_name (argv[0]);
@@ -328,7 +326,7 @@ main (int argc, char *argv[])
       exit (EXIT_SUCCESS);
       break;
     case 'n':
-      node_name = optarg;
+            //node_name = optarg;
       break;
     case 'i':
       fn = optarg;

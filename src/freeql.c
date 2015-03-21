@@ -8,14 +8,15 @@
 #include <assert.h>
 
 #include <netdb.h>
-#include "freeq/libfreeq.h"
+//#include "freeq/libfreeq.h"
 #include "libfreeq-private.h"
+#include "ssl-common.h"
 
 static const struct option longopts[] = {
-	{"nodename", required_argument, NULL, 'n'},
-	{"help", no_argument, NULL, 'h'},
-	{"version", no_argument, NULL, 'v'},
-	{NULL, 0, NULL, 0}
+        {"nodename", required_argument, NULL, 'n'},
+        {"help", no_argument, NULL, 'h'},
+        {"version", no_argument, NULL, 'v'},
+        {NULL, 0, NULL, 0}
 };
 
 static void print_help (void);
@@ -27,7 +28,7 @@ init_sockaddr (struct sockaddr_in *name,
                uint16_t port)
 {
   struct hostent *hostinfo;
-  
+
   name->sin_family = AF_INET;
   name->sin_port = htons (port);
   hostinfo = gethostbyname (hostname);
@@ -44,15 +45,11 @@ main (int argc, char *argv[])
 {
   int optc;
   int lose = 0;
-  int nbytes;
-  int err;
-  char buf[2000];
   const char *node_name = _("localhost");
+  struct freeq_table *tbl;
   char *sql;
-  struct freeq_ctx *ctx;
-  //struct freeq_table *table;
-  int sock;
-  struct sockaddr_in servername;
+  struct freeq_ctx *freeqctx;
+  int err;
 
   set_program_name(argv[0]);
   setlocale(LC_ALL, "");
@@ -86,64 +83,32 @@ main (int argc, char *argv[])
   {
     if (optind < argc)
       fprintf (stderr, _("%s: extra operand: %s\n"), program_name, argv[optind]);
-    
+
     fprintf (stderr, _("Try `%s --help' for more information.\n"), program_name);
     exit (EXIT_FAILURE);
   }
-  
-  sock = socket(PF_INET, SOCK_STREAM, 0);
-  if (sock < 0)
-  {
-    perror("socket (client)");
-    exit(EXIT_FAILURE);
-  }
 
-  init_sockaddr(&servername, node_name, 13000);
-  if (0 > connect(sock,
-                  (struct sockaddr *) &servername,
-                  sizeof (servername)))
-  {
-    perror("connect (client)");
+  SSL_library_init();
+  SSL_load_error_strings();
+
+  err = freeq_new(&freeqctx, "tblsend", node_name);
+  if (err < 0)
     exit(EXIT_FAILURE);
-  }
-  
-  puts("sending query...\n");  
+
+  freeq_set_identity(freeqctx, node_name);
+  freeq_set_log_priority(freeqctx, 10);
+
   asprintf(&sql, "%s\r\n", argv[1]);
 
-  nbytes = write(sock, sql, strlen(sql) + 1);
-  if (nbytes < 0)
+  if (freeq_ssl_query(freeqctx, "localhost:13002", sql, &tbl))
   {
-    perror ("write");
-    exit (EXIT_FAILURE);
+    err(freeqctx, "some kind of error during query...\n");
+  } else {
+    freeq_table_print(freeqctx, tbl, stdout);
   }
 
   free(sql);
-  
-  puts("waiting for response...\n");
-  nbytes = recv(sock, (void *)buf , 2000, 0);
-  if(nbytes < 0)
-  {
-    perror("recv failed");
-  }
 
-  err = freeq_new(&ctx, "", "");
-  if (err) {
-    dbg(ctx, "unable to create freeq context");
-    exit(EXIT_FAILURE);
-  }
-  
-  freeq_set_log_priority(ctx, 10);
-  
-  // err = freeq_table_header_from_msgpack(ctx, buf, nbytes, &table);
-  if (err) {
-    dbg(ctx, "invalid header in message, rejecting\n");
-  } else {  
-    printf("Read %d bytes from server, table ok\n", nbytes);
-  }
-  
-  //freeq_table_to_text(ctx, table);
-
-  close (sock);
   exit (EXIT_SUCCESS);
 
 }
@@ -184,16 +149,16 @@ Print a friendly, customizable greeting.\n"), stdout);
 Report bugs to: %s\n"), PACKAGE_BUGREPORT);
 #ifdef PACKAGE_PACKAGER_BUG_REPORTS
   printf (_("Report %s bugs to: %s\n"), PACKAGE_PACKAGER,
-	  PACKAGE_PACKAGER_BUG_REPORTS);
+          PACKAGE_PACKAGER_BUG_REPORTS);
 #endif
 #ifdef PACKAGE_URL
   printf (_("%s home page: <%s>\n"), PACKAGE_NAME, PACKAGE_URL);
 #else
   printf (_("%s home page: <http://www.gnu.org/software/%s/>\n"),
-	  PACKAGE_NAME, PACKAGE);
+          PACKAGE_NAME, PACKAGE);
 #endif
   fputs (_("General help using GNU software: <http://www.gnu.org/gethelp/>\n"),
-	 stdout);
+         stdout);
 }
 
 

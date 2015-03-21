@@ -34,6 +34,8 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <math.h>
+
+#define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 
 #include <freeq/libfreeq.h>
@@ -115,9 +117,7 @@ FREEQ_EXPORT int freeq_generation_new(freeq_generation_t **gen)
 	if (g->strings == NULL)
 		return -ENOMEM;
 
-
 	g_rw_lock_init(&(g->rw_lock));
-
 	g->refcount = 1;
 	g->era = time(NULL);
 	*gen = g;
@@ -169,7 +169,6 @@ dezigzag32(struct longlong *r)
 	r->hi = -(low >> 31);
 }
 
-
 /* This code was shamelessly stolen and adapted from beautiful C-only
    version of protobuf by 云风 (cloudwu) , available at:
    https://github.com/cloudwu/pbc */
@@ -218,12 +217,10 @@ encode_varint(varint_buf_t *b, uint64_t number)
 	int i = 0;
 	do {
 		b->data[i] = (uint8_t)(number | 0x80);
-		//buffer_putbyte(b, (uint8_t)(number | 0x80));
 		number >>= 7;
 		++i;
 	} while (number >= 0x80);
 	b->data[i] = (uint8_t)number;
-	//buffer_putbyte(b, (uint8_t)number);
 	return i+1;
 }
 
@@ -246,7 +243,7 @@ BIO_write_varint32(BIO *b, uint32_t number)
 {
 	varint32_buf_t buf;
 	int len = encode_varint32(&buf, number);
-	BIO_write(b, &buf, len);
+	return BIO_write(b, &buf, len);
 }
 
 FREEQ_EXPORT int
@@ -254,7 +251,7 @@ BIO_write_varint(BIO *b, uint64_t number)
 {
 	varint_buf_t buf;
 	int len = encode_varint(&buf, number);
-	BIO_write(b, &buf, len);
+	return BIO_write(b, &buf, len);
 }
 
 int
@@ -262,23 +259,46 @@ BIO_write_varintsigned32(BIO *b, uint32_t number)
 {
 	varint32_buf_t buf;
 	int len = encode_varintsigned32(&buf, number);
-	BIO_write(b, &buf, len);
+	return BIO_write(b, &buf, len);
 }
 
-int
+FREEQ_EXPORT int
 BIO_write_varintsigned(BIO *b, int64_t number)
 {
 	varint_buf_t buf;
 	int len = encode_varintsigned(&buf, number);
-	BIO_write(b, &buf, len);
+	return BIO_write(b, &buf, len);
+}
+
+FREEQ_EXPORT ssize_t
+BIO_write_vstr(BIO *b, const char *s)
+{
+	int pos = 0;
+	ssize_t slen;
+
+	if (s == NULL)
+	{
+		pos += BIO_write_varint32(b, 0);
+	}
+	else
+	{
+		slen = strlen(s);
+		pos += BIO_write_varint32(b, slen);
+		pos += BIO_write(b, s, slen);
+	}
+	return pos;
 }
 
 ssize_t
 BIO_read_varint(BIO *b, struct longlong *result) {
+	int err;
 	char x;
 
-	if (!BIO_read(b, &x, 1))
+	if (!(err = BIO_read(b, &x, 1)))
+	{
+		fprintf(stderr, "tried to read one byte from bio, got %d\n", err);
 		return 0;
+	}
 
 	if (!(x & 0x80)) {
 		result->low = x;
@@ -442,6 +462,100 @@ SSL_CTX *setup_client_ctx(void)
     return ctx;
 }
 
+SSL_CTX *setup_server_ctx(void)
+{
+    SSL_CTX *ctx;
+
+    fprintf(stderr, "ABOUT TO ALLOCATE SSL CTX...");
+    if (!(ctx = SSL_CTX_new(SSLv23_method()))) {
+	    int_error("Unable to create new SSL CTX!");
+    }
+
+    if (SSL_CTX_load_verify_locations(ctx, CAFILE, CADIR) != 1)
+	int_error("Error loading CA file and/or directory");
+    if (SSL_CTX_set_default_verify_paths(ctx) != 1)
+	int_error("Error loading default CA file and/or directory");
+    if (SSL_CTX_use_certificate_chain_file(ctx, CERTFILE) != 1)
+	int_error("Error loading certificate from file");
+    if (SSL_CTX_use_PrivateKey_file(ctx, CERTFILE, SSL_FILETYPE_PEM) != 1)
+	int_error("Error loading private key from file");
+    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
+		       verify_callback);
+    SSL_CTX_set_verify_depth(ctx, 4);
+    SSL_CTX_set_options(ctx, SSL_OP_ALL | SSL_OP_NO_SSLv2 |
+			SSL_OP_SINGLE_DH_USE);
+    SSL_CTX_set_tmp_dh_callback(ctx, tmp_dh_callback);
+    if (SSL_CTX_set_cipher_list(ctx, CIPHER_LIST) != 1)
+	int_error("Error setting cipher list (no valid ciphers)");
+
+    return ctx;
+}
+
+
+FREEQ_EXPORT
+int
+freeq_ssl_query(struct freeq_ctx *ctx, const char *server, const char *sql, struct freeq_table **t)
+{
+	BIO     *conn;
+	SSL     *ssl;
+	long    err;
+	struct freeq_table *tbl;
+
+	dbg(ctx, "freeq_ssl_query: %s\n", sql);
+	conn = BIO_new_connect("localhost:13002");
+	if (!conn)
+	{
+		int_error("Error creating connection BIO");
+		return FREEQ_ERR;
+	}
+
+	if (BIO_do_connect(conn) <= 0)
+	{
+		// FREE conn
+		int_error("Error connecting to remote machine");
+		return FREEQ_ERR;
+	}
+	ssl = SSL_new(ctx->sslctx);
+	SSL_set_bio(ssl, conn, conn);
+
+	if (SSL_connect(ssl) <= 0)
+	{
+		int_error("Error connecting SSL object");
+		return FREEQ_ERR;
+	}
+
+	if ((err = post_connection_check(ctx, ssl, server)) != X509_V_OK)
+	{
+		fprintf(stderr, "-Error: peer certificate: %s\n",
+			X509_verify_cert_error_string(err));
+		int_error("Error checking SSL object after connection");
+		return FREEQ_ERR;
+	}
+
+	BIO  *buf_io, *ssl_bio;
+	buf_io = BIO_new(BIO_f_buffer());
+	ssl_bio = BIO_new(BIO_f_ssl());
+	BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE);
+	BIO_push(buf_io, ssl_bio);
+
+	err = BIO_puts(buf_io, sql);
+	dbg(ctx, "wrote query \"%s\" %ld reading...\n", sql, err);
+	if ((err = BIO_flush(buf_io)) < 0)
+	{
+		err(ctx, "Error flushing BIO");
+	}
+
+	err = freeq_table_bio_read(ctx, &tbl, buf_io, NULL);
+
+	SSL_shutdown(ssl);
+	SSL_free(ssl);
+	//SSL_CTX_free(sslctx);
+
+	*t = tbl;
+	return err;
+
+}
+
 static void locking_function(int mode, int n, const char * file, int line)
 {
     if (mode & CRYPTO_LOCK)
@@ -455,17 +569,22 @@ static unsigned long id_function(void)
     return ((unsigned long)pthread_self());
 }
 
+FREEQ_EXPORT
+SSL *freeq_ssl_new(struct freeq_ctx *ctx)
+{
+	return SSL_new(ctx->sslctx);
+}
+
+FREEQ_EXPORT
 int freeq_init_ssl(struct freeq_ctx *ctx)
 {
 	if (ssl_initialized)
 		return true;
-
-	int i;
-	mutex_buf = (pthread_mutex_t *)malloc(CRYPTO_num_locks() *sizeof(pthread_mutex_t));
+	mutex_buf = (pthread_mutex_t *)malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t));
 	if (!mutex_buf)
 		exit(1);
 
-	for (i = 0; i < CRYPTO_num_locks(); i++)
+	for (int i = 0; i < CRYPTO_num_locks(); i++)
 		pthread_mutex_init(&(mutex_buf[i]), NULL) ;
 
 	CRYPTO_set_id_callback(id_function);
@@ -477,7 +596,10 @@ int freeq_init_ssl(struct freeq_ctx *ctx)
 	SSL_library_init();
 	SSL_load_error_strings();
 	seed_prng();
-	ctx->sslctx = setup_client_ctx();
+
+	//ctx->sslctx = setup_client_ctx();
+	ctx->sslctx = setup_server_ctx();
+
 	ssl_initialized = true;
 	return 0;
 }
@@ -519,6 +641,7 @@ FREEQ_EXPORT int freeq_new(struct freeq_ctx **ctx, const char *appname, const ch
 	freeq_set_identity(c, identity ? identity : "unknown");
 	info(c, "ctx %p created\n", c);
 	//dbg(c, "log_priority=%d\n", c->log_priority);
+	freeq_init_ssl(c);
 	*ctx = c;
 	return 0;
 }
@@ -670,7 +793,7 @@ FREEQ_EXPORT int freeq_error_write_sock(struct freeq_ctx *ctx, const char *errms
 	return freeq_table_bio_write(ctx, &errtbl, b);
 }
 
-bool ragged(int c, int rlens[], int *min) {
+bool ragged(int c, int rlens[], uint32_t *min) {
 	*min = rlens[0];
 	bool ragged = false;
 
@@ -792,8 +915,11 @@ BIO *b;
 	struct freeq_column *cols;
 
 	pos += BIO_read_varint(b, &(r.s));
+	dbg(ctx, "read %d bytes , name len %d\n", pos, r.i);
+
 	pos += BIO_read(b, (char *)&strbuf, (ssize_t)r.i);
 	name = strndup((char *)&strbuf, r.i);
+
 	dbg(ctx, "name %s pos %d\n", name, pos);
 
 	pos += BIO_read_varint(b, &(r.s));
@@ -835,8 +961,8 @@ BIO *b;
 		cols[i].name = strndup((char *)&strbuf, r.i);
 		dbg(ctx, "colname for %d is %s, pos %d\n", i, cols[i].name, pos);
 	}
-	dbg(ctx, "colnames, pos %d\n", pos);
 
+	dbg(ctx, "colnames, pos %d\n", pos);
 	GSList **coldata = calloc(sizeof(GSList *), tbl->numcols);
 	if (coldata == NULL)
 	{
@@ -865,7 +991,7 @@ BIO *b;
 			case FREEQ_COL_STRING:
 				dezigzag32(&(r.s));
 				slen = r.i;
-				dbg(ctx, "%d/%d str len %d pos %d\n",i,j, r.i, pos);
+				dbg(ctx, "%d/%d str len %" PRId64 " pos %d\n", i, j, r.i, pos);
 				if (slen > 0)
 				{
 					pos += BIO_read(b, (char *)&strbuf, slen);
@@ -875,8 +1001,8 @@ BIO *b;
 				else if (slen < 0)
 				{
 					dbg(ctx, "negative offset %d list length is %d, value at offset is %s\n",
-					    slen, g_slist_length(coldata[j]), g_slist_nth_data(coldata[j], -slen -1));
-					coldata[j] = g_slist_prepend(coldata[j], g_slist_nth_data(coldata[j], -slen -1));
+					    slen, g_slist_length(coldata[j]), (char *)g_slist_nth_data(coldata[j], -slen -1));
+					coldata[j] = g_slist_prepend(coldata[j], (char *)g_slist_nth_data(coldata[j], -slen -1));
 				}
 				else
 				{
@@ -884,11 +1010,11 @@ BIO *b;
 					coldata[j] = g_slist_prepend(coldata[j], NULL);
 					//dbg(ctx, "string %s pos %d\n", coldata[j]->data, buf.p);
 				}
-				dbg(ctx, "%d/%d str %s pos %d\n",i,j, coldata[j]->data, pos);
+				dbg(ctx, "%d/%d str %s pos %d\n",i,j, (char *)coldata[j]->data, pos);
 				break;
 			case FREEQ_COL_NUMBER:
 				dezigzag64(&(r.s));
-				dbg(ctx, "prev[%d]: %d\n", j, prev[j]);
+				dbg(ctx, "prev[%d]: %" PRIu64" \n", j, prev[j]);
 				dbg(ctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " pos %d\n",
 					   i, j,          r.i,               prev[j] + r.i, pos);
 				prev[j] = prev[j] + r.i;
@@ -916,6 +1042,20 @@ BIO *b;
 	return 0;
 }
 
+int conn_cleanup(void)
+{
+    int i;
+    if (!mutex_buf)
+	return 0;
+    CRYPTO_set_id_callback(NULL);
+    CRYPTO_set_locking_callback(NULL);
+    for (i = 0; i < CRYPTO_num_locks(); i++)
+	pthread_mutex_destroy(&(mutex_buf[i]));
+    free(mutex_buf);
+    mutex_buf = NULL;
+    return 1;
+}
+
 FREEQ_EXPORT int freeq_table_sendto_ssl(struct freeq_ctx *freeqctx, struct freeq_table *t)
 {
 	BIO     *conn;
@@ -937,7 +1077,7 @@ FREEQ_EXPORT int freeq_table_sendto_ssl(struct freeq_ctx *freeqctx, struct freeq
 	SSL_set_bio(ssl, conn, conn);
 	if (SSL_connect(ssl) <= 0)
 		int_error("Error connecting SSL object");
-	if ((err = post_connection_check(ssl, server)) != X509_V_OK)
+	if ((err = post_connection_check(freeqctx, ssl, server)) != X509_V_OK)
 	{
 		fprintf(stderr, "-Error: peer certificate: %s\n",
 			X509_verify_cert_error_string(err));
@@ -978,7 +1118,6 @@ struct freeq_table *t;
 BIO *b;
 {
 	int i = 0;
-	int numcols = t->numcols;
 	gchar *val;
 	int slen = 0;
 	unsigned int pos = 0;
@@ -1064,8 +1203,9 @@ BIO *b;
 			case FREEQ_COL_NUMBER:
 				num = GPOINTER_TO_INT(colnxt[j]->data);
 				pos += BIO_write_varintsigned(b, (int64_t)num - prev[j]);
-				dbg(ctx, "prev[%d]: %d\n", j, prev[j]);
-				dbg(ctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " pos %d\n", i,j, num, (int64_t)num-prev[j], pos);
+				dbg(ctx, "prev[%d]: %" PRIu64 "\n", j, prev[j]);
+				dbg(ctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " pos %d\n",
+				    i,j, num, (int64_t)num-prev[j], pos);
 				prev[j] = num;
 				break;
 			case FREEQ_COL_IPV4ADDR:
@@ -1085,6 +1225,7 @@ BIO *b;
 			g_hash_table_destroy(strtbls[i]);
 
 	BIO_flush(b);
+	return 0;
 }
 
 
@@ -1113,7 +1254,7 @@ FREEQ_EXPORT void freeq_table_print(struct freeq_ctx *ctx, struct freeq_table *t
 			switch (t->columns[j].coltype)
 			{
 			case FREEQ_COL_STRING:
-				fprintf(of, "%s", colp[j]->data == NULL ? "null" : colp[j]->data);
+				fprintf(of, "%s", colp[j]->data == NULL ? "null" : (char *)colp[j]->data);
 				break;
 			case FREEQ_COL_NUMBER:
 				fprintf(of, "%d", GPOINTER_TO_INT(colp[j]->data));
@@ -1155,7 +1296,7 @@ FREEQ_EXPORT int verify_callback(int ok, X509_STORE_CTX *store)
     return ok;
 }
 
-FREEQ_EXPORT long post_connection_check(SSL *ssl, const char *host)
+FREEQ_EXPORT long post_connection_check(struct freeq_ctx *ctx, SSL *ssl, const char *host)
 {
     X509      *cert;
     X509_NAME *subj;
@@ -1169,13 +1310,15 @@ FREEQ_EXPORT long post_connection_check(SSL *ssl, const char *host)
      * if the examples are modified to enable anonymous ciphers or for the server
      * to not require a client certificate.
      */
+
+    dbg(ctx, "in post connection check, checking cert...\n");
     if (!(cert = SSL_get_peer_certificate(ssl)) || !host)
 	goto err_occured;
+
+    dbg(ctx, "in post connection check, checking extensions...\n");
     if ((extcount = X509_get_ext_count(cert)) > 0)
     {
-	int i;
-
-	for (i = 0;  i < extcount;  i++)
+	for (int i = 0;  i < extcount;  i++)
 	{
 	    char              *extstr;
 	    X509_EXTENSION    *ext;
@@ -1197,43 +1340,48 @@ FREEQ_EXPORT long post_connection_check(SSL *ssl, const char *host)
 
 #if (OPENSSL_VERSION_NUMBER > 0x00907000L)
 		if (meth->it)
-		    ext_str = ASN1_item_d2i(NULL, (const unsigned char **)&data, ext->value->length,
-					    ASN1_ITEM_ptr(meth->it));
+			ext_str = ASN1_item_d2i(NULL, (const unsigned char **)&data, ext->value->length,
+						ASN1_ITEM_ptr(meth->it));
 		else
-		    ext_str = meth->d2i(NULL, (const unsigned char **)&data, ext->value->length);
+			ext_str = meth->d2i(NULL, (const unsigned char **)&data, ext->value->length);
 #else
 		ext_str = meth->d2i(NULL, &data, ext->value->length);
 #endif
 		val = meth->i2v(meth, ext_str, NULL);
 		for (j = 0;  j < sk_CONF_VALUE_num(val);  j++)
 		{
-		    nval = sk_CONF_VALUE_value(val, j);
-		    if (!strcmp(nval->name, "DNS") && !strcmp(nval->value, host))
-		    {
-			ok = 1;
-			break;
-		    }
+			nval = sk_CONF_VALUE_value(val, j);
+			if (!strcmp(nval->name, "DNS") && !strcmp(nval->value, host))
+			{
+				ok = 1;
+				break;
+			}
 		}
 	    }
 	    if (ok)
-		break;
+		    break;
 	}
     }
 
+    dbg(ctx, "in post connection check, checking subject...\n");
     if (!ok && (subj = X509_get_subject_name(cert)) &&
 	X509_NAME_get_text_by_NID(subj, NID_commonName, data, 256) > 0)
     {
-	data[255] = 0;
-	if (strcasecmp(data, host) != 0)
-	    goto err_occured;
+	    data[255] = 0;
+	    if (strcasecmp(data, host) != 0)
+	    {
+		    dbg(ctx, "in post connection check, mismatch: %s/%s...\n", data, host);
+		    //goto err_occured;
+	    }
     }
 
+    dbg(ctx, "in post connection check, checking subject...\n");
     X509_free(cert);
     return SSL_get_verify_result(ssl);
 
 err_occured:
     if (cert)
-	X509_free(cert);
+	    X509_free(cert);
     return X509_V_ERR_APPLICATION_VERIFICATION;
 }
 

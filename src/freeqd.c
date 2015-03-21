@@ -10,6 +10,9 @@
 #include <signal.h>
 #include <stdbool.h>
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 #include "sqlite4.h"
 #include "freeq/libfreeq.h"
 #include "libfreeq-private.h"
@@ -28,7 +31,6 @@
 #define SUCCESS 0
 #define MAX_MSG 8192
 
-#define int_error(msg) handle_error(__FILE__, __LINE__, msg)
 #include "ssl-common.h"
 
 int server;
@@ -52,85 +54,16 @@ struct freeqd_state {
 	GRWLock rw_lock;
 };
 
-struct conn_ctx {
+struct srv_ctx {
 	sqlite4 *pDb;
-	SSL *ssl;
 	struct freeq_ctx *freeqctx;
 	struct freeqd_state *fst;
 };
 
-struct CRYPTO_dynlock_value
-{
-    pthread_mutex_t mutex;
+struct conn_ctx {
+	struct srv_ctx *srvctx;
+	BIO *client;
 };
-
-static pthread_mutex_t *mutex_buf = NULL;
-DH *dh512 = NULL;
-DH *dh1024 = NULL;
-
-void init_dhparams(void) {
-    BIO *bio;
-    bio = BIO_new_file("control/dh512.pem", "r");
-    if (!bio)
-	int_error("Error opening file dh512.pem");
-    dh512 = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
-    if (!dh512)
-	int_error("Error reading DH parameters from dh512.pem");
-    BIO_free(bio);
-    bio = BIO_new_file("control/dh1024.pem", "r");
-    if (!bio)
-	int_error("Error opening file dh1024.pem");
-    dh1024 = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
-    if (!dh1024)
-	int_error("Error reading DH parameters from dh1024.pem");
-    BIO_free(bio);
-}
-
-DH *tmp_dh_callback(SSL *ssl, int is_export, int keylength)
-{
-    DH *ret;
-    if (!dh512 || !dh1024)
-	init_dhparams();
-
-    switch (keylength) {
-    case 512:
-	ret = dh512;
-	break;
-    case 1024:
-    default:
-	ret = dh1024;
-	break;
-    }
-    return ret;
-}
-
-SSL_CTX *setup_server_ctx(void)
-{
-    SSL_CTX *ctx;
-
-    ctx = SSL_CTX_new(SSLv23_method());
-    if (SSL_CTX_load_verify_locations(ctx, CAFILE, CADIR) != 1)
-	int_error("Error loading CA file and/or directory");
-    if (SSL_CTX_set_default_verify_paths(ctx) != 1)
-	int_error("Error loading default CA file and/or directory");
-    if (SSL_CTX_use_certificate_chain_file(ctx, CERTFILE) != 1)
-	int_error("Error loading certificate from file");
-
-    if (SSL_CTX_use_PrivateKey_file(ctx, CERTFILE, SSL_FILETYPE_PEM) != 1)
-	int_error("Error loading private key from file");
-
-    SSL_CTX_set_verify(ctx,
-		       SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
-		       verify_callback);
-    SSL_CTX_set_verify_depth(ctx, 4);
-    SSL_CTX_set_options(ctx, SSL_OP_ALL | SSL_OP_NO_SSLv2 |
-			SSL_OP_SINGLE_DH_USE);
-    SSL_CTX_set_tmp_dh_callback(ctx, tmp_dh_callback);
-    if (SSL_CTX_set_cipher_list(ctx, CIPHER_LIST) != 1)
-	int_error("Error setting cipher list (no valid ciphers)");
-
-    return ctx;
-}
 
 void handle_table(struct freeq_ctx *ctx, SSL *ssl)
 {
@@ -205,6 +138,7 @@ int generation_table_merge(struct freeq_ctx *ctx, struct freeqd_state *fst, BIO 
 
 	g_hash_table_insert(gen->tables, tbl->name, tbl);
 	g_rw_lock_writer_unlock(&(gen->rw_lock));
+	return 0;
 
 }
 
@@ -271,19 +205,26 @@ int bio_peername(BIO *bio, char **hostname)
 void* conn_handler(void *arg)
 {
 	long err;
+	SSL *ssl;
 	struct conn_ctx *ctx = (struct conn_ctx *)arg;
-	SSL *ssl = ctx->ssl;
+	struct freeq_ctx *freeqctx = ctx->srvctx->freeqctx;
+	struct freeqd_state *fst = ctx->srvctx->fst;
+	BIO *client = ctx->client;
+
 	pthread_detach(pthread_self());
 
+	ssl = freeq_ssl_new(freeqctx);
+	dbg(freeqctx, "session creation, setting bio\n");
+	SSL_set_bio(ssl, client, client);
 	if (SSL_accept(ssl) <= 0)
 	{
 		int_error("Error accepting SSL connection");
 		return NULL;
 	}
 
-	if ((err = post_connection_check(ssl, "localhost")) != X509_V_OK)
+	if ((err = post_connection_check(freeqctx, ssl, "localhost")) != X509_V_OK)
 	{
-		err(ctx->freeqctx, "-Error: peer certificate: %s\n", X509_verify_cert_error_string(err));
+		err(freeqctx, "-Error: peer certificate: %s\n", X509_verify_cert_error_string(err));
 		int_error("Error checking SSL object after connection");
 	}
 
@@ -293,79 +234,26 @@ void* conn_handler(void *arg)
 	BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE);
 	BIO_push(buf_io, ssl_bio);
 
-	dbg(ctx->freeqctx, "ssl client connection opened\n");
-	if (generation_table_merge(ctx->freeqctx, ctx->fst, buf_io))
+	dbg(freeqctx, "ssl client connection opened\n");
+
+	if (generation_table_merge(freeqctx, fst, buf_io))
 	{
-		err(ctx->freeqctx, "table merge failed\n");
+		err(freeqctx, "table merge failed\n");
 		SSL_shutdown(ssl);
 	}
 	else
 	{
-		dbg(ctx->freeqctx, "table merged ok\n");
+		dbg(freeqctx, "table merged ok\n");
 		SSL_clear(ssl);
 	}
 
-	dbg(ctx->freeqctx, "ssl client connection closed\n");
+	dbg(freeqctx, "ssl client connection closed\n");
 	SSL_free(ssl);
 
 	ERR_remove_state(0);
-
-}
-
-static void locking_function(int mode, int n, const char * file, int line)
-{
-    if (mode & CRYPTO_LOCK)
-	pthread_mutex_lock(&(mutex_buf[n]));
-    else
-	pthread_mutex_unlock(&(mutex_buf[n]));
-}
-
-static unsigned long id_function(void)
-{
-    return ((unsigned long)pthread_self());
-}
-
-int conn_cleanup(void)
-{
-    int i;
-    if (!mutex_buf)
 	return 0;
-    CRYPTO_set_id_callback(NULL);
-    CRYPTO_set_locking_callback(NULL);
-    for (i = 0; i < CRYPTO_num_locks(); i++)
-	pthread_mutex_destroy(&(mutex_buf[i]));
-    free(mutex_buf);
-    mutex_buf = NULL;
-    return 1;
 }
 
-static struct CRYPTO_dynlock_value * dyn_create_function(const char *file,
-							 int line)
-{
-    struct CRYPTO_dynlock_value *value;
-    value = (struct CRYPTO_dynlock_value *)malloc(sizeof(struct CRYPTO_dynlock_value));
-    if (!value)
-	return NULL;
-
-    pthread_mutex_init(&(value->mutex), NULL);
-    return value;
-}
-static void dyn_lock_function(int mode,
-			      struct CRYPTO_dynlock_value *l,
-			      const char *file,
-			      int line)
-{
-    if (mode & CRYPTO_LOCK)
-	pthread_mutex_lock(&(l->mutex));
-    else
-	pthread_mutex_unlock(&(l->mutex));
-}
-static void dyn_destroy_function(struct CRYPTO_dynlock_value *l,
-				 const char *file, int line)
-{
-    pthread_mutex_destroy(&(l->mutex));
-    free(l);
-}
 
 const char *freeq_sqlite_typexpr[] = {
 	"NULL",
@@ -414,6 +302,7 @@ int ddl_insert(struct freeq_ctx *ctx, struct freeq_table *tbl, GString *stm)
 		g_string_append_printf(stm, "?%d,", i);
 	g_string_append_printf(stm, "?%d);", tbl->numcols);
 	dbg(ctx, "statement: %s\n", stm->str);
+	return 0;
 }
 
 int tbl_to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
@@ -426,8 +315,6 @@ int tbl_to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 	for (int j = 0; j < tbl->numcols; j++)
 		colp[j] = tbl->columns[j].data;
 
-	const char **strarrp = NULL;
-	int *intarrp = NULL;
 	int res;
 
 	freeq_table_print(ctx, tbl, stdout);
@@ -452,7 +339,7 @@ int tbl_to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 	}
 
 	ddl_insert(ctx, tbl, sql);
-	if (sqlite4_prepare(mDb, sql->str, sql->len, &stmt, NULL) != SQLITE4_OK)
+	if ((res = sqlite4_prepare(mDb, sql->str, sql->len, &stmt, NULL)) != SQLITE4_OK)
 	{
 		dbg(ctx, "failed to create statement (%d), rolling back\n", res);
 		sqlite4_exec(mDb, "ROLLBACK;", NULL, NULL);
@@ -475,8 +362,8 @@ int tbl_to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 							SQLITE4_TRANSIENT, NULL);
 				if (res != SQLITE4_OK)
 				{
-					dbg(ctx, "stmt: %s\n", stmt);
-					dbg(ctx, "row %d failed binding string column %d %s: %s (%d)\n", i, j, colp[j]->data, sqlite4_errmsg(mDb), res);
+					dbg(ctx, "stmt: %s\n", (char *)stmt);
+					dbg(ctx, "row %d failed binding string column %d %s: %s (%d)\n", i, j, (char *)colp[j]->data, sqlite4_errmsg(mDb), res);
 				}
 				break;
 			case FREEQ_COL_NUMBER:
@@ -512,22 +399,21 @@ int tbl_to_db(struct freeq_ctx *ctx, struct freeq_table *tbl, sqlite4 *mDb)
 int gen_to_db(struct freeq_ctx *ctx, freeq_generation_t *g, sqlite4 *mDb)
 {
 	GHashTableIter iter;
-	guint size = g_hash_table_size(g->tables);
 	gpointer key, val;
 	struct freeq_table *t;
 
 	g_hash_table_iter_init(&iter, g->tables);
 	while (g_hash_table_iter_next(&iter, &key, &val))
 	{
-		dbg(ctx, "replacing table %s\n", key);
+		dbg(ctx, "replacing table %s\n", (char *)key);
 		t = (struct freeq_table *)val;
 		if (tbl_to_db(ctx, t, mDb))
 		{
-			err(ctx, "gen_to_db failed to publish %s", key);
+			err(ctx, "gen_to_db failed to publish %s", (char *)key);
 		}
 		else
 		{
-			dbg(ctx, "published %s\n", key);
+			dbg(ctx, "published %s\n", (char *)key);
 		}
 	}
 	return 0;
@@ -535,39 +421,41 @@ int gen_to_db(struct freeq_ctx *ctx, freeq_generation_t *g, sqlite4 *mDb)
 
 void *status_logger (void *arg)
 {
-	struct conn_ctx *ctx = (struct conn_ctx *)arg;
+	struct srv_ctx *srv = (struct srv_ctx *)arg;
+	struct freeq_ctx *freeqctx = srv->freeqctx;
+	struct freeqd_state *fst = srv->fst;
 	freeq_generation_t *curgen;
 
-	dbg(ctx->freeqctx, "status_logger starting\n");
+	dbg(freeqctx, "status_logger starting\n");
 	time_t dt;
 	while (1)
 	{
 		sleep(5);
-		curgen = ctx->fst->current;
+		curgen = fst->current;
 		dt = time(NULL) - curgen->era;
 		if (dt > 10)
 		{
 			freeq_generation_t *newgen;
-			dbg(ctx->freeqctx, "generation is ready to publish\n");
+			//dbg(freeqctx, "generation is ready to publish\n");
 			if (freeq_generation_new(&newgen))
 			{
-				dbg(ctx->freeqctx, "unable to allocate generation\n");
+				dbg(freeqctx, "unable to allocate generation\n");
 				continue;
 			}
 
 			/* advance generation, take pointer to previous generation */
-			g_rw_lock_writer_lock(&(ctx->fst->rw_lock));
-			ctx->fst->current = newgen;
-			g_rw_lock_writer_unlock(&(ctx->fst->rw_lock));
+			g_rw_lock_writer_lock(&(fst->rw_lock));
+			fst->current = newgen;
+			g_rw_lock_writer_unlock(&(fst->rw_lock));
 
 			/* to_db on previous generation */
 			g_rw_lock_writer_lock(&(curgen->rw_lock));
-			gen_to_db(ctx->freeqctx, curgen, ctx->pDb);
+			gen_to_db(freeqctx, curgen, srv->pDb);
 			g_rw_lock_writer_unlock(&(curgen->rw_lock));
 			/* free previous generation */
 
 		} else {
-			dbg(ctx->freeqctx, "generation age is %d\n", dt);
+			//dbg(freeqctx, "generation age is %d\n", (int)dt);
 		}
 	}
 }
@@ -649,223 +537,248 @@ int readnf (int fd, char *line)
 	return SUCCESS;
 }
 
-void* sqlhandler(void *paramsd) {
-	struct freeq_ctx *ctx;
-	struct sockaddr_in cliAddr;
-	char line[MAX_MSG];
-	int res;
-	int client_local;
+void* sqlhandler(void *arg) {
 
-	int bsize;
-	const char *s;
-	char **strings;
-	int *vals;
+	char line[MAX_MSG];
+	int ret, err;
+	SSL *ssl;
+
+	struct conn_ctx *conn = (struct conn_ctx *)arg;
+	struct freeq_ctx *freeqctx = conn->srvctx->freeqctx;
+	struct freeqd_state *fst = conn->srvctx->fst;
+	BIO *client = conn->client;
+
 	unsigned int pos = 0;
 	int slen = 0;
-
-	struct freeq_table *tblp;
-	struct freeq_column *colp;
-	struct freeq_column_segment *seg;
-
 	sqlite4_stmt *pStmt;
-	socklen_t addr_len;
-	int segment_size = 2000;
-	int i;
 
-	BIO *out;
-	client_local = *((int *)paramsd);
-	addr_len = sizeof(cliAddr);
+	dbg(freeqctx, "session creation, setting bio\n");
 
-	getpeername(client_local, (struct sockaddr*)&cliAddr, &addr_len);
-	memset(line, 0, MAX_MSG);
-
-	res = freeq_new(&ctx, "freeqd_handler", "identity");
-	freeq_set_log_priority(ctx, 10);
-	if (res)
+	if (!(ssl = freeq_ssl_new(freeqctx)))
 	{
-		dbg(ctx, "unable to create freeq context\n");
+		err(freeqctx, "couldn't allocate new ssl instance");
 		return NULL;
 	}
 
-	out = BIO_new_fd(client_local, BIO_NOCLOSE);
-
-	while(!recvstop)
+	SSL_set_bio(ssl, client, client);
+	if (SSL_accept(ssl) <= 0)
 	{
-		res = readline(client_local, line, MAX_MSG);
-		dbg(ctx, "received query from client: \"%s\" res=%d\n", line, res);
-		if (res == 0) {
-			printf("zero res from readnf\n");
-			break;
-		}
-
-		if (res == 2)
-			continue;
-
-		res = sqlite4_prepare(pDb, line, strlen(line), &pStmt, 0);
-		if (res != SQLITE4_OK)
-		{
-			dbg(ctx, "prepare failed for %s sending error, res was %d\n", line, res);
-			//freeq_error_write_sock(ctx, sqlite4_errmsg(pDb), client_local);
-			dbg(ctx, sqlite4_errmsg(pDb));
-			BIO_printf(out, "error: %s\n", sqlite4_errmsg(pDb));
-			sqlite4_finalize(pStmt);
-			continue;
-		}
-
-		/* column type is unset until the query has been
-		 * stepped once */
-		if (sqlite4_step(pStmt) != SQLITE4_ROW)
-		{
-			dbg(ctx, "repsonse from first step was not SQLITE4_ROW...");
-			//freeq_error_write_sock(ctx, sqlite4_errmsg(pDb), client_local);
-			sqlite4_finalize(pStmt);
-			continue;
-		}
-
-		int numcols = sqlite4_column_count(pStmt);
-		dbg(ctx, "response will include %d columns\n", numcols);
-		int ctypes[numcols];
-
-		for (i = 0; i < numcols; i++)
-		{
-			//ctypes[i] = sqlite_to_freeq_coltype[sqlite4_column_type(pStmt, i)];
-			ctypes[i] = sqlite4_column_type(pStmt, i);
-		}
-
-		GHashTable *strtbls[numcols];
-		uint64_t prev[numcols];
-		memset(prev, 0, sizeof(prev));
-
-		slen = strlen("result");
-		pos += BIO_write_varint32(out, slen);
-		pos += BIO_write(out, "result", slen);
-
-		slen = strlen("identity");
-		pos += BIO_write_varint32(out, slen);
-		pos += BIO_write(out, "identity", slen);
-		//dbg(ctx, "identity %s write %d\n", ctx->identity, pos);
-
-		pos += BIO_write_varint32(out, numcols);
-		dbg(ctx, "numcols %d write %d\n", numcols, pos);
-
-		for (i=0; i < numcols; i++)
-		{
-			if (ctypes[i] == FREEQ_COL_STRING)
-				strtbls[i] = g_hash_table_new_full(g_str_hash,
-								   g_str_equal,
-								   NULL,
-								   NULL);
-		}
-
-		for (i=0; i < numcols; i++)
-			pos += BIO_write(out, (char *)&(ctypes[i]), sizeof(freeq_coltype_t));
-
-		for (i=0; i < numcols; i++)
-		{
-			const char *name = sqlite4_column_name(pStmt, i);
-			slen = strlen(name);
-			pos += BIO_write_varint32(out, slen);
-			pos += BIO_write(out, name, slen);
-			dbg(ctx, "colname for %d is %s, pos %d\n", i, name, pos);
-		}
-		dbg(ctx, "colnames, pos %d\n", pos);
-
-		do
-		{
-			for (i = 0; i < numcols; i++)
-			{
-				const char *text;
-				switch (ctypes[i])
-				{
-				case FREEQ_COL_STRING:
-					text = sqlite4_column_text(pStmt, i, &slen);
-					pos += BIO_write(out, text, slen);
-					//const char *zDetail = (const char *)sqlite4_column_text(pExplain, 3, 0);
-				case FREEQ_COL_NUMBER:
-					BIO_write_varint(out, sqlite4_column_int(pStmt, i));
-				default:
-					break;
-				}
-
-			}
-		}
-		while (SQLITE4_ROW == sqlite4_step(pStmt));
-
-		sqlite4_finalize(pStmt);
-		dbg(ctx, "sending result\n");
-
-		memset(line, 0, MAX_MSG);
-		freeq_table_unref(tblp);
-		sleep(1);
+		int_error("Error accepting SSL connection");
+		return NULL;
 	}
 
-	//freeq_unref(ctx);
-	close(client_local);
- }
+	if ((err = post_connection_check(freeqctx, ssl, "localhost")) != X509_V_OK)
+	{
+		err(freeqctx, "-Error: peer certificate: %s\n", X509_verify_cert_error_string(err));
+		int_error("Error checking SSL object after connection");
+	}
 
+	BIO  *buf_io, *ssl_bio;
+	buf_io = BIO_new(BIO_f_buffer());
+	ssl_bio = BIO_new(BIO_f_ssl());
+	BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE);
+	BIO_push(buf_io, ssl_bio);
+	dbg(freeqctx, "ssl client connection opened\n");
+
+	memset(line, 0, MAX_MSG);
+	dbg(freeqctx, "about to read...\n");
+	ret = BIO_gets(buf_io, line, MAX_MSG);
+	dbg(freeqctx, "sqlhandler: ret was %d query was %s\n", ret, line);
+
+	ret = sqlite4_prepare(pDb, line, strlen(line), &pStmt, 0);
+	if (ret != SQLITE4_OK)
+	{
+		dbg(freeqctx, "prepare failed for %s sending error, ret was %d\n", line, ret);
+		//freeq_error_write_sock(freeqctx, sqlite4_errmsg(pDb), buf_io);
+		dbg(freeqctx, sqlite4_errmsg(pDb));
+		//BIO_printf(buf_io, "error: %s\n", sqlite4_errmsg(pDb));
+		sqlite4_finalize(pStmt);
+		return NULL;
+	}
+
+	/* column type is unset until the query has been
+	 * stepped once */
+	if (sqlite4_step(pStmt) != SQLITE4_ROW)
+	{
+		dbg(freeqctx, "repsonse from first step was not SQLITE4_ROW...");
+		//freeq_error_write_sock(freeqctx, sqlite4_errmsg(pDb), buf_io);
+		sqlite4_finalize(pStmt);
+		return NULL;
+	}
+
+	int numcols = sqlite4_column_count(pStmt);
+	dbg(freeqctx, "response will include %d columns\n", numcols);
+	int ctypes[numcols];
+
+	for (int j = 0; j < numcols; j++)
+	{
+		switch (sqlite4_column_type(pStmt, j))
+		{
+		case SQLITE4_INTEGER:
+			ctypes[j] = FREEQ_COL_NUMBER;
+			break;
+		case SQLITE4_TEXT:
+			ctypes[j] = FREEQ_COL_STRING;
+			break;
+		default:
+			ctypes[j] = FREEQ_COL_NULL;
+		}
+	}
+
+	GHashTable *strtbls[numcols];
+	uint64_t prev[numcols];
+	memset(prev, 0, sizeof(prev));
+	memset(strtbls, 0, sizeof(strtbls));
+
+	pos += BIO_write_vstr(buf_io, "result");
+	dbg(freeqctx, "name result pos %d\n", pos);
+
+	pos += BIO_write_vstr(buf_io, "identity");
+	dbg(freeqctx, "identity identity post %d\n", pos);
+
+	pos += BIO_write_varint32(buf_io, numcols);
+	dbg(freeqctx, "numcols %d pos %d\n", numcols, pos);
+
+	for (int j=0; j < numcols; j++)
+	{
+		if (ctypes[j] == FREEQ_COL_STRING) {
+			strtbls[j] = g_hash_table_new_full(g_str_hash,
+							   g_str_equal,
+							   NULL,
+							   NULL);
+		}
+	}
+
+	for (int j=0; j < numcols; j++)
+	{
+		pos += BIO_write(buf_io,
+				 (char *)&(ctypes[j]),
+				 sizeof(freeq_coltype_t));
+		dbg(freeqctx, "coltype for %d is %d, pos %d\n", j,
+		    ctypes[j], pos);
+	}
+
+	for (int j=0; j < numcols; j++)
+	{
+		const char *name = sqlite4_column_name(pStmt, j);
+		pos += BIO_write_vstr(buf_io, name);
+		dbg(freeqctx, "colname for %d is %s, pos %d\n", j, name, pos);
+	}
+	dbg(freeqctx, "colnames, pos %d\n", pos);
+	int i = 0;
+	do
+	{
+		for (int j = 0; j < numcols; j++)
+		{
+			const char *text;
+			uint64_t num = 0;
+			switch (ctypes[j])
+			{
+			case FREEQ_COL_STRING:
+				text = sqlite4_column_text(pStmt, j, &slen);
+				pos += BIO_write_vstr(buf_io, text);
+				//const char *zDetail = (const char *)sqlite4_column_text(pExplain, 3, 0);
+			case FREEQ_COL_NUMBER:
+				num = sqlite4_column_int(pStmt, j);
+				pos += BIO_write_varintsigned(buf_io, (int64_t)num - prev[j]);
+				dbg(freeqctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " pos %d\n",
+				    i,j, num, (int64_t)num-prev[j], pos);
+				prev[j] = num;
+			default:
+				break;
+			}
+		}
+		i++;
+	}
+	while (SQLITE4_ROW == sqlite4_step(pStmt));
+
+	if ((err = BIO_flush(buf_io)) < 0)
+	{
+		err(freeqctx, "Error flushing BIO");
+	}
+
+	sqlite4_finalize(pStmt);
+	SSL_shutdown(ssl);
+	SSL_free(ssl);
+	//close(sock);
+
+	return 0;
+}
+
+void *cliserver(void *arg) {
+
+	struct srv_ctx *srv = (struct srv_ctx *)arg;
+	struct freeq_ctx *freeqctx = srv->freeqctx;
+	struct conn_ctx *conn_ctx;
+	int res;
+	static stralloc aggport = {0};
+	pthread_t tid;
+	//stralloc cliport = {0};
+	SSL *ssl;
+	BIO *acc, *client;
+
+	res = control_readline(&aggport, "control/aggport");
+	if (!res)
+		stralloc_cats(&aggport, "localhost:13001");
+	stralloc_0(&aggport);
+
+	//dbg(freeqctx, "starting aggregation listener on %s\n", aggport);
+	acc = BIO_new_accept("13001");
+	if (!acc)
+		int_error("Error creating server socket");
+
+	if (BIO_do_accept(acc) <= 0)
+		int_error("Error binding server socket");
+
+	for (;;)
+	{
+		dbg(freeqctx, "waiting for connection\n");
+		if (BIO_do_accept(acc) <= 0)
+			int_error("Error accepting connection");
+
+		dbg(freeqctx, "accepted connection, setting up ssl\n");
+		//bio_peername(acc);
+
+		client = BIO_pop(acc);
+		conn_ctx->client = client;
+		pthread_create(&tid, 0, &conn_handler, (void *)conn_ctx);
+		// TODO: free ctx
+	}
+}
 
 void *sqlserver(void *arg) {
-
-	int client;
-	int optval;
+	struct srv_ctx *srv = (struct srv_ctx *)arg;
 	int err;
-	socklen_t addr_len;
 	pthread_t thread;
 
-	struct sockaddr_in cliAddr;
-	struct sockaddr_in servAddr;
-	struct freeq_ctx *ctx;
-	err = freeq_new(&ctx, "appname", "identity");
-	if (err < 0)
-		exit(EXIT_FAILURE);
-
-	freeq_set_log_priority(ctx, 10);
+	BIO *acc, *client;
+	SSL *ssl;
 
 	signal(SIGINT, cleanup);
 	signal(SIGTERM, cleanup);
 	signal(SIGPIPE, SIG_IGN);
 
-	server = socket(PF_INET, SOCK_STREAM, 0);
-	if (server < 0)
+	acc = BIO_new_accept("127.0.0.1:13002");
+	if (!acc)
+		int_error("Error creating server socket");
+
+	if (BIO_do_accept(acc) <= 0)
+		int_error("Error binding server socket");
+
+	for (;;)
 	{
-		dbg(ctx, "cannot open socket ");
-		freeq_unref(ctx);
-		return NULL;
+		if (BIO_do_accept(acc) <= 0)
+			int_error("Error accepting connection");
+		client = BIO_pop(acc);
+		struct conn_ctx *conn = malloc(sizeof(struct conn_ctx));
+		conn->srvctx = srv;
+		conn->client = client;
+		pthread_create(&thread, 0, &sqlhandler, (void *)conn);
 	}
 
-	servAddr.sin_family = AF_INET;
-	servAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	servAddr.sin_port = htons(SQL_PORT);
-	memset(servAddr.sin_zero, 0, 8);
-	optval = 1;
-
-	setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval);
-
-	if (bind(server, (struct sockaddr *) &servAddr, sizeof(struct sockaddr)) < 0)
-	{
-		dbg(ctx, "cannot bind port ");
-		freeq_unref(ctx);
-		return NULL;
-	}
-
-	listen(server, 5);
-
-	while (!recvstop)
-	{
-		dbg(ctx, "waiting for data on port %u\n", SQL_PORT);
-		addr_len = sizeof(cliAddr);
-		client = accept(server, (struct sockaddr *) &cliAddr, &addr_len);
-		if (client < 0)
-		{
-			dbg(ctx, "cannot accept connection ");
-			break;
-		}
-		dbg(ctx, "accepted connection, creating sqlhandler thread\n");
-		pthread_create(&thread, 0, &sqlhandler, &client);
-	}
-	close(server);
-	freeq_unref(ctx);
-	exit(0);
+	BIO_free(acc);
+	//freeq_unref(ctx);
+	return 0;
 }
 
 int init_freeqd_state(struct freeq_ctx *freeqctx, struct freeqd_state *s)
@@ -879,6 +792,7 @@ int init_freeqd_state(struct freeq_ctx *freeqctx, struct freeqd_state *s)
 	}
 	g_rw_lock_init(&(s->rw_lock));
 	s->current = fgen;
+	return 0;
 }
 
 int
@@ -888,11 +802,8 @@ main (int argc, char *argv[])
 	int res;
 	sigset_t set;
 
-	BIO *acc, *client;
-	SSL *ssl;
+	BIO *acc;
 	SSL_CTX *sslctx;
-	pthread_t tid;
-
 	struct freeqd_state fst;
 
 	//pthread_t t_receiver;
@@ -901,10 +812,8 @@ main (int argc, char *argv[])
 	pthread_t t_monitor;
 	pthread_t t_status_logger;
 	pthread_t t_sqlserver;
-
+	pthread_t t_cliserver;
 	static stralloc clients = {0};
-	static stralloc aggport = {0};
-	//stralloc cliport = {0};
 
 	set_program_name(argv[0]);
 	setlocale(LC_ALL, "");
@@ -915,6 +824,7 @@ main (int argc, char *argv[])
 #endif
 
 	struct freeq_ctx *freeqctx;
+
 	err = freeq_new(&freeqctx, "appname", "identity");
 	if (err < 0)
 		exit(EXIT_FAILURE);
@@ -950,22 +860,18 @@ main (int argc, char *argv[])
 		dbg(freeqctx, "failed to read clients file, database not initialized\n");
 	}
 
-	struct conn_ctx status_ctx;
-	status_ctx.ssl = ssl;
+	struct srv_ctx status_ctx;
 	status_ctx.pDb = pDb;
 	status_ctx.fst = &fst;
 	status_ctx.freeqctx = freeqctx;
-	struct conn_ctx *sctx = &status_ctx;
-	pthread_create(&t_status_logger, 0, &status_logger, sctx);
+	struct srv_ctx *sctx = &status_ctx;
+
+	pthread_create(&t_status_logger, 0, &status_logger, (void *)sctx);
 
 	//if (control_readfile(&clients,"",1) != 1)
 	//	pthread_create(&t_receiver, 0, &receiver, (void *)&ri);
 	//	pthread_create(&t_recvinvite, 0, &recvinvite, (void *)recvinvite_nnuri);
 	//}
-
-	struct conn_ctx sqlctx;
-	sqlctx.pDb = pDb;
-	pthread_create(&t_sqlserver, 0, &sqlserver, (void *)&sqlctx);
 
 	res = sqlite4_exec(pDb, "create table if not exists freeq_stats(int last);", NULL, NULL);
 	if (res != SQLITE4_OK)
@@ -973,75 +879,15 @@ main (int argc, char *argv[])
 		printf("creating freeq_stats failed: %d %s\n", res, sqlite4_errmsg(pDb));
 	}
 
-	dbg(freeqctx, "initializing SSL mutexes\n");
-	mutex_buf = (pthread_mutex_t *)malloc(CRYPTO_num_locks() *sizeof(pthread_mutex_t));
-	if (!mutex_buf)
-	{
-		dbg(freeqctx, "unable to allocate mutex buf, bailing\n");
-		exit(1);
-	}
+	pthread_create(&t_sqlserver, 0, &sqlserver, (void *)sctx);
+	pthread_create(&t_cliserver, 0, &cliserver, (void *)sctx);
 
-	for (int i = 0; i < CRYPTO_num_locks(); i++)
-		pthread_mutex_init(&(mutex_buf[i]), NULL) ;
-
-	dbg(freeqctx, "setting static lock callbacks\n");
-	CRYPTO_set_id_callback(id_function);
-	CRYPTO_set_locking_callback(locking_function);
-	dbg(freeqctx, "setting dynamic lock callbacks\n");
-	CRYPTO_set_dynlock_create_callback(dyn_create_function);
-	CRYPTO_set_dynlock_lock_callback(dyn_lock_function);
-	CRYPTO_set_dynlock_destroy_callback(dyn_destroy_function);
-
-	dbg(freeqctx, "seeding PRNG\n");
-	seed_prng();
-	dbg(freeqctx, "initializing ssl library\n");
-	SSL_library_init();
-	SSL_load_error_strings();
-
-	sslctx = setup_server_ctx();
-
-	dbg(freeqctx, "setting static lock callbacks\n");
-	res = control_readline(&aggport, "control/aggport");
-	if (!res)
-		stralloc_cats(&aggport, "localhost:13001");
-	stralloc_0(&aggport);
-
-	dbg(freeqctx, "starting aggregation listener on %s\n", aggport);
-	acc = BIO_new_accept("127.0.0.1:13001");
-	if (!acc)
-		int_error("Error creating server socket");
-
-	if (BIO_do_accept(acc) <= 0)
-		int_error("Error binding server socket");
-
-	for (;;)
-	{
-		dbg(freeqctx, "waiting for connection\n");
-		if (BIO_do_accept(acc) <= 0)
-			int_error("Error accepting connection");
-		dbg(freeqctx, "accepted connection, setting up ssl\n");
-		/*bio_peername(acc);*/
-
-		client = BIO_pop(acc);
-		if (!(ssl = SSL_new(sslctx)))
-			int_error("Error creating SSL context");
-		dbg(freeqctx, "session creation, setting bio\n");
-		SSL_set_bio(ssl, client, client);
-
-		dbg(freeqctx, "spawning thread\n");
-		struct conn_ctx *ctx = malloc(sizeof(struct conn_ctx));
-		ctx->ssl = ssl;
-		ctx->pDb = pDb;
-		ctx->fst = &fst;
-		ctx->freeqctx = freeqctx;
-
-		pthread_create(&tid, 0, &conn_handler, ctx);
-		// TODO: free ctx
-
+	while (1) {
+		sleep(1);
 	}
 
 	SSL_CTX_free(sslctx);
 	BIO_free(acc);
 	freeq_unref(freeqctx);
-
+	return 0;
 }

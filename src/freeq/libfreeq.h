@@ -36,6 +36,8 @@ extern "C" {
 #include "openssl/ssl.h"
 #include "openssl/err.h"
 
+#define FREEQ_ERR 1
+#define FREEQ_OK 0
 
 /*
  * freeq_ctx
@@ -172,7 +174,8 @@ int freeq_table_read(struct freeq_ctx *c, struct freeq_table **table, int sock);
 int freeq_table_bio_read(struct freeq_ctx *c, struct freeq_table **table, BIO *b, GStringChunk *strchunk);
 int freeq_table_bio_read_header(struct freeq_ctx *ctx, struct freeq_table **t, BIO *b);
 int freeq_table_bio_read_tabledata(struct freeq_ctx *ctx, struct freeq_table *t, BIO *b, GStringChunk *strchnk);
-
+int freeq_init_ssl(struct freeq_ctx *ctx);
+SSL *freeq_ssl_new(struct freeq_ctx *ctx);
 int freeq_table_ssl_read(struct freeq_ctx *ctx, struct freeq_table **tbl, SSL *ssl);
 int freeq_table_sendto_ssl(struct freeq_ctx *freeqctx, struct freeq_table *t);
 
@@ -193,7 +196,7 @@ int freeq_table_new_fromcols(struct freeq_ctx *ctx,
 			     bool destroy_data);
 
 int freeq_table_header_from_msgpack(struct freeq_ctx *ctx, char *buf, size_t bufsize, struct freeq_table **table);
-int freeq_table_to_text(struct freeq_ctx *ctx, struct freeq_table *table);
+int freeq_ssl_query(struct freeq_ctx *ctx, const char *server, const char *sql, struct freeq_table **t);
 //struct freeq_column *freeq_table_get_some_column(struct freeq_table *table);
 
 #ifdef __cplusplus
