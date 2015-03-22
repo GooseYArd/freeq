@@ -380,21 +380,21 @@ static int log_priority(const char *priority)
 }
 
 void init_dhparams(void) {
-    BIO *bio;
-    bio = BIO_new_file("control/dh512.pem", "r");
-    if (!bio)
-        int_error("Error opening file dh512.pem");
-    dh512 = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
-    if (!dh512)
-        int_error("Error reading DH parameters from dh512.pem");
-    BIO_free(bio);
-    bio = BIO_new_file("control/dh1024.pem", "r");
-    if (!bio)
-        int_error("Error opening file dh1024.pem");
-    dh1024 = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
-    if (!dh1024)
-        int_error("Error reading DH parameters from dh1024.pem");
-    BIO_free(bio);
+        BIO *bio;
+        bio = BIO_new_file("control/dh512.pem", "r");
+        if (!bio)
+                int_error("Error opening file dh512.pem");
+        dh512 = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
+        if (!dh512)
+                int_error("Error reading DH parameters from dh512.pem");
+        BIO_free(bio);
+        bio = BIO_new_file("control/dh1024.pem", "r");
+        if (!bio)
+                int_error("Error opening file dh1024.pem");
+        dh1024 = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
+        if (!dh1024)
+                int_error("Error reading DH parameters from dh1024.pem");
+        BIO_free(bio);
 }
 DH *tmp_dh_callback(SSL *ssl, int is_export, int keylength)
 {
@@ -442,54 +442,68 @@ static void dyn_destroy_function(struct CRYPTO_dynlock_value *l,
     free(l);
 }
 
-SSL_CTX *setup_client_ctx(void)
+SSL_CTX *setup_client_ctx(struct freeq_ctx *freeqctx)
 {
-    SSL_CTX *ctx;
+        SSL_CTX *ctx;
 
-    ctx = SSL_CTX_new(SSLv23_method(  ));
-    if (SSL_CTX_load_verify_locations(ctx, CAFILE, CADIR) != 1)
-        int_error("Error loading CA file and/or directory");
-    if (SSL_CTX_set_default_verify_paths(ctx) != 1)
-        int_error("Error loading default CA file and/or directory");
-    if (SSL_CTX_use_certificate_chain_file(ctx, CERTFILE) != 1)
-        int_error("Error loading certificate from file");
-    if (SSL_CTX_use_PrivateKey_file(ctx, CERTFILE, SSL_FILETYPE_PEM) != 1)
-        int_error("Error loading private key from file");
-    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, verify_callback);
-    SSL_CTX_set_verify_depth(ctx, 4);
-    SSL_CTX_set_options(ctx, SSL_OP_ALL|SSL_OP_NO_SSLv2);
-    if (SSL_CTX_set_cipher_list(ctx, CIPHER_LIST) != 1)
-        int_error("Error setting cipher list (no valid ciphers)");
-    return ctx;
+        ctx = SSL_CTX_new(SSLv23_method(  ));
+
+        if (SSL_CTX_load_verify_locations(ctx, CAFILE, CADIR) != 1)
+                err(freeqctx, "Error loading CA file and/or directory");
+        if (SSL_CTX_set_default_verify_paths(ctx) != 1)
+                err(freeqctx, "Error loading default CA file and/or directory");
+
+        dbg(freeqctx, "setting cert chain file to %s\n", CERTFILE);
+//        if (SSL_CTX_use_certificate_chain_file(ctx, CERTFILE) != 1)
+//                err(freeqctx, "Error loading certificate from file");
+
+        if (SSL_CTX_use_certificate_chain_file(ctx, CERTFILE) != 1)
+                err(freeqctx, "Error loading certificate from file");
+
+        dbg(freeqctx, "setting key file to %s\n", CERTFILE);
+        if (SSL_CTX_use_PrivateKey_file(ctx, CERTFILE, SSL_FILETYPE_PEM) != 1)
+                err(freeqctx, "Error loading private key from file");
+
+        SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, verify_callback);
+        SSL_CTX_set_verify_depth(ctx, 4);
+
+        SSL_CTX_set_options(ctx, SSL_OP_ALL|SSL_OP_NO_SSLv2);
+
+        if (SSL_CTX_set_cipher_list(ctx, CIPHER_LIST) != 1)
+                err(freeqctx, "Error setting cipher list (no valid ciphers)");
+
+        return ctx;
 }
 
-SSL_CTX *setup_server_ctx(void)
+SSL_CTX *setup_server_ctx(struct freeq_ctx *freeqctx)
 {
     SSL_CTX *ctx;
+
     if (!(ctx = SSL_CTX_new(SSLv23_method()))) {
-        int_error("Unable to create new SSL CTX!");
+            err(freeqctx, "Unable to create new SSL CTX!");
     }
 
     if (SSL_CTX_load_verify_locations(ctx, CAFILE, CADIR) != 1)
-        int_error("Error loading CA file and/or directory");
+        err(freeqctx, "Error loading CA file and/or directory");
     if (SSL_CTX_set_default_verify_paths(ctx) != 1)
-        int_error("Error loading default CA file and/or directory");
+        err(freeqctx, "Error loading default CA file and/or directory");
     if (SSL_CTX_use_certificate_chain_file(ctx, CERTFILE) != 1)
-        int_error("Error loading certificate from file");
+        err(freeqctx, "Error loading certificate from file");
     if (SSL_CTX_use_PrivateKey_file(ctx, CERTFILE, SSL_FILETYPE_PEM) != 1)
-        int_error("Error loading private key from file");
+        err(freeqctx, "Error loading private key from file");
+
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
                        verify_callback);
     SSL_CTX_set_verify_depth(ctx, 4);
+
     SSL_CTX_set_options(ctx, SSL_OP_ALL | SSL_OP_NO_SSLv2 |
                         SSL_OP_SINGLE_DH_USE);
     SSL_CTX_set_tmp_dh_callback(ctx, tmp_dh_callback);
     if (SSL_CTX_set_cipher_list(ctx, CIPHER_LIST) != 1)
-        int_error("Error setting cipher list (no valid ciphers)");
+        err(freeqctx, "Error setting cipher list (no valid ciphers)");
 
     return ctx;
 }
-
 
 FREEQ_EXPORT
 int
@@ -500,23 +514,20 @@ freeq_ssl_query(struct freeq_ctx *ctx, const char *server, const char *sql, stru
         long    err;
         struct freeq_table *tbl;
 
-        dbg(ctx, "freeq_ssl_query: %s\n", sql);
-        conn = BIO_new_connect("localhost:13002");
+        conn = BIO_new_connect((char *)server);
         if (!conn)
         {
-                int_error("Error creating connection BIO");
+                err(ctx, "BIO_new_connect to %s failed\n", server);
                 return FREEQ_ERR;
         }
-
         if (BIO_do_connect(conn) <= 0)
         {
-                // FREE conn
-                int_error("Error connecting to remote machine");
+                err(ctx, "BIO_do_connect to %s failed\n", server);
                 return FREEQ_ERR;
         }
+
         ssl = SSL_new(ctx->sslctx);
         SSL_set_bio(ssl, conn, conn);
-
         if (SSL_connect(ssl) <= 0)
         {
                 int_error("Error connecting SSL object");
@@ -575,10 +586,13 @@ SSL *freeq_ssl_new(struct freeq_ctx *ctx)
 }
 
 FREEQ_EXPORT
-int freeq_init_ssl(struct freeq_ctx *ctx)
+int freeq_init_ssl(struct freeq_ctx *ctx, freeq_mode_t mode)
 {
+        dbg(ctx, "initializing ssl...\n");
         if (ssl_initialized)
                 return true;
+
+        dbg(ctx, "registering openssl locking functions\n");
         mutex_buf = (pthread_mutex_t *)malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t));
         if (!mutex_buf)
                 exit(1);
@@ -586,19 +600,31 @@ int freeq_init_ssl(struct freeq_ctx *ctx)
         for (int i = 0; i < CRYPTO_num_locks(); i++)
                 pthread_mutex_init(&(mutex_buf[i]), NULL) ;
 
+        dbg(ctx, "registering openssl callbacks\n");
         CRYPTO_set_id_callback(id_function);
         CRYPTO_set_locking_callback(locking_function);
         CRYPTO_set_dynlock_create_callback(dyn_create_function);
         CRYPTO_set_dynlock_lock_callback(dyn_lock_function);
         CRYPTO_set_dynlock_destroy_callback(dyn_destroy_function);
 
+        dbg(ctx, "openssl initializing openssl library\n");
         SSL_library_init();
+        dbg(ctx, "openssl loading error strings");
         SSL_load_error_strings();
+        dbg(ctx, "openssl sseding PRNG\n");
         seed_prng();
 
-        //ctx->sslctx = setup_client_ctx();
-        ctx->sslctx = setup_server_ctx();
-
+        switch (mode) {
+        case FREEQ_SERVER:
+                dbg(ctx, "openssl setting up server context\n");
+                ctx->sslctx = setup_server_ctx(ctx);
+                break;
+        default:
+                dbg(ctx, "openssl setting up CLIENT context\n");
+                ctx->sslctx = setup_client_ctx(ctx);
+                break;
+        };
+        dbg(ctx, "openssl ready\n");
         ssl_initialized = true;
         return 0;
 }
@@ -614,7 +640,7 @@ int freeq_init_ssl(struct freeq_ctx *ctx)
  *
  * Returns: a new freeq library context
  **/
-FREEQ_EXPORT int freeq_new(struct freeq_ctx **ctx, const char *appname, const char *identity)
+FREEQ_EXPORT int freeq_new(struct freeq_ctx **ctx, const char *appname, const char *identity, freeq_mode_t mode)
 {
         const char *env;
         struct freeq_ctx *c;
@@ -639,8 +665,9 @@ FREEQ_EXPORT int freeq_new(struct freeq_ctx **ctx, const char *appname, const ch
 
         freeq_set_identity(c, identity ? identity : "unknown");
         info(c, "ctx %p created\n", c);
-        //dbg(c, "log_priority=%d\n", c->log_priority);
-        freeq_init_ssl(c);
+        freeq_set_log_priority(c, 10);
+        freeq_init_ssl(c, mode);
+
         *ctx = c;
         return 0;
 }
@@ -1456,9 +1483,17 @@ FREEQ_EXPORT long post_connection_check(struct freeq_ctx *ctx, SSL *ssl, const c
      * to not require a client certificate.
      */
 
-    dbg(ctx, "in post connection check, checking cert...\n");
-    if (!(cert = SSL_get_peer_certificate(ssl)) || !host)
-        goto err_occured;
+    if (!host) {
+            dbg(ctx, "in post connection check, hostname is null, unable to verify\n");
+            goto err_occured;
+    }
+
+    cert = SSL_get_peer_certificate(ssl);
+    if (!cert)
+    {
+            err(ctx, "peer cert was null, unable to verify\n");
+            goto err_occured;
+    }
 
     dbg(ctx, "in post connection check, checking extensions...\n");
     if ((extcount = X509_get_ext_count(cert)) > 0)
@@ -1520,8 +1555,8 @@ FREEQ_EXPORT long post_connection_check(struct freeq_ctx *ctx, SSL *ssl, const c
             }
     }
 
-    dbg(ctx, "in post connection check, checking subject...\n");
     X509_free(cert);
+    dbg(ctx, "no errors in post_connection check, verify results will be: %ld\n", SSL_get_verify_result(ssl));
     return SSL_get_verify_result(ssl);
 
 err_occured:

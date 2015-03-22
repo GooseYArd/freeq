@@ -52,6 +52,12 @@ struct freeq_ctx *freeq_ref(struct freeq_ctx *ctx);
 struct freeq_ctx *freeq_unref(struct freeq_ctx *ctx);
 struct freeq_cbuf;
 
+typedef enum
+{
+	FREEQ_CLIENT,
+	FREEQ_SERVER
+} freeq_mode_t;
+
 typedef struct freeq_generation_t freeq_generation_t;
 struct freeq_generation_t
 {
@@ -63,7 +69,7 @@ struct freeq_generation_t
 	freeq_generation_t *next;
 };
 
-int freeq_new(struct freeq_ctx **ctx, const char *appname, const char *identity);
+int freeq_new(struct freeq_ctx **ctx, const char *appname, const char *identity, freeq_mode_t mode);
 void freeq_set_log_fn(struct freeq_ctx *ctx,
 		  void (*log_fn)(struct freeq_ctx *ctx,
 				 int priority, const char *file, int line, const char *fn,
@@ -86,6 +92,7 @@ typedef uint8_t freeq_coltype_t;
 #define FREEQ_COL_TIME 3
 #define FREEQ_COL_IPV4ADDR 4
 #define FREEQ_COL_IPV6ADDR 5
+
 
 /* typedef enum */
 /* { */
@@ -176,7 +183,7 @@ int freeq_table_read(struct freeq_ctx *c, struct freeq_table **table, int sock);
 int freeq_table_bio_read(struct freeq_ctx *c, struct freeq_table **table, BIO *b, GStringChunk *strchunk);
 int freeq_table_bio_read_header(struct freeq_ctx *ctx, struct freeq_table **t, BIO *b);
 int freeq_table_bio_read_tabledata(struct freeq_ctx *ctx, struct freeq_table *t, BIO *b, GStringChunk *strchnk);
-int freeq_init_ssl(struct freeq_ctx *ctx);
+int freeq_init_ssl(struct freeq_ctx *ctx, freeq_mode_t mode);
 SSL *freeq_ssl_new(struct freeq_ctx *ctx);
 int freeq_table_ssl_read(struct freeq_ctx *ctx, struct freeq_table **tbl, SSL *ssl);
 int freeq_table_sendto_ssl(struct freeq_ctx *freeqctx, struct freeq_table *t);

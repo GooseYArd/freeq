@@ -133,9 +133,6 @@ procnothread(struct freeq_ctx *ctx, const char *machineip)
         err = freeq_table_sendto_ssl(ctx, tbl);
         dbg(ctx, "freeq_table_sendto_ssl returned %d\n", err);
 
-                printf("OK HERE\n");
-
-
         freeq_table_unref(tbl);
         closeproc(proc);
         freeq_unref(ctx);
@@ -156,7 +153,7 @@ main(int argc, char *argv[])
 #endif
         static stralloc identity = {0};
 
-        err = freeq_new(&ctx, "system_monitor", NULL);
+        err = freeq_new(&ctx, "system_monitor", NULL, FREEQ_CLIENT);
         if (err < 0)
                 exit(EXIT_FAILURE);
 

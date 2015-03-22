@@ -229,7 +229,7 @@ void pubtbl(const char *fn)
         int err;
         GStringChunk *strchnk;
 
-        err = freeq_new(&ctx, "system_monitor", "tblsend");
+        err = freeq_new(&ctx, "system_monitor", "tblsend", FREEQ_CLIENT);
         if (err < 0)
                 exit(EXIT_FAILURE);
 

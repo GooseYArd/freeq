@@ -216,7 +216,7 @@ void* conn_handler(void *arg)
 
         if ((err = post_connection_check(freeqctx, ssl, "localhost")) != X509_V_OK)
         {
-                err(freeqctx, "-Error: peer certificate: %s\n", X509_verify_cert_error_string(err));
+                err(freeqctx, "error: peer certificate: %s\n", X509_verify_cert_error_string(err));
                 int_error("Error checking SSL object after connection");
         }
 
@@ -513,8 +513,7 @@ void* sqlhandler(void *arg) {
 
         if ((err = post_connection_check(freeqctx, ssl, "localhost")) != X509_V_OK)
         {
-                err(freeqctx, "-Error: peer certificate: %s\n", X509_verify_cert_error_string(err));
-                int_error("Error checking SSL object after connection");
+                err(freeqctx, "error: peer certificate: %s\n", X509_verify_cert_error_string(err));
                 BIO_free_all(client);
                 free(conn);
                 pthread_exit(NULL);
@@ -587,8 +586,8 @@ void *cliserver(void *arg) {
                 dbg(freeqctx, "waiting for connection\n");
                 if (BIO_do_accept(acc) <= 0)
                         int_error("Error accepting connection");
-
                 dbg(freeqctx, "accepted connection, setting up ssl\n");
+
                 //bio_peername(acc);
 
                 client = BIO_pop(acc);
@@ -685,7 +684,7 @@ main (int argc, char *argv[])
         textdomain(PACKAGE);
 #endif
 
-        err = freeq_new(&freeqctx, "appname", "identity");
+        err = freeq_new(&freeqctx, "appname", "identity", FREEQ_SERVER);
         if (err < 0)
                 exit(EXIT_FAILURE);
 
