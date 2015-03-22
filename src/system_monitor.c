@@ -9,24 +9,22 @@
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
-#include <nanomsg/nn.h>
-#include <nanomsg/pipeline.h>
 #include <assert.h>
 
 #include "freeq/libfreeq.h"
+#include "libfreeq-private.h"
 #include <proc/readproc.h>
 
-static const struct option longopts[] = {
-        {"nodename", required_argument, NULL, 'n'},
-        {"help", no_argument, NULL, 'h'},
-        {"version", no_argument, NULL, 'v'},
-        {NULL, 0, NULL, 0}
-};
+/* control */
+#include "control/stralloc.h"
+#include "control/constmap.h"
+#include "control/control.h"
+#include "control/qsutil.h"
 
 freeq_coltype_t coltypes[] = {
         FREEQ_COL_STRING, /* machineip */
-        FREEQ_COL_NUMBER, /* pid */
         FREEQ_COL_STRING, /* command */
+        FREEQ_COL_NUMBER, /* pid */
         FREEQ_COL_NUMBER, /* pcpu */
         FREEQ_COL_NUMBER, /* state */
         FREEQ_COL_NUMBER, /* priority */
@@ -41,8 +39,8 @@ freeq_coltype_t coltypes[] = {
 
 const char *colnames[] = {
         "machineip",
-        "pid",
         "command",
+        "pid",
         "pcpu",
         "state",
         "priority",
@@ -54,9 +52,6 @@ const char *colnames[] = {
         "ruid",
         "rgid"
 };
-
-static void print_help(void);
-static void print_version(void);
 
 void
 freeproctab(proc_t ** tab)
@@ -87,11 +82,12 @@ procnothread(struct freeq_ctx *ctx, const char *machineip)
                 *egid = NULL,
                 *ruid = NULL,
                 *rgid = NULL;
+
         PROCTAB* proc = openproc(PROC_FILLMEM | PROC_FILLSTAT | PROC_FILLSTATUS);
         memset(&proc_info, 0, sizeof(proc_info));
 
         while (readproc(proc, &proc_info) != NULL) {
-                cmds        =  g_slist_append(cmds,        proc_info.cmd);
+                cmds        =  g_slist_append(cmds,        strdup(proc_info.cmd));
                 pids        =  g_slist_append(pids,        GINT_TO_POINTER(proc_info.ppid));
                 pcpu        =  g_slist_append(pcpu,        GINT_TO_POINTER(proc_info.pcpu));
                 state       =  g_slist_append(state,       GINT_TO_POINTER(proc_info.state));
@@ -108,14 +104,14 @@ procnothread(struct freeq_ctx *ctx, const char *machineip)
 
         err = freeq_table_new(ctx,
                               "procnothread",
-                              12,
+                              13,
                               (freeq_coltype_t *)&coltypes,
                               (const char **)&colnames,
                               &tbl,
                               0,
                               machineips,
-                              pids,
                               cmds,
+                              pids,
                               pcpu,
                               state,
                               priority,
@@ -127,11 +123,19 @@ procnothread(struct freeq_ctx *ctx, const char *machineip)
                               ruid,
                               rgid);
 
-        if (err < 0)
-                exit(EXIT_FAILURE);
 
-        freeq_table_print(ctx, tbl, stdout);
-        freeq_table_sendto_ssl(ctx, tbl);
+        if (err < 0)
+        {
+                err(ctx, "unable to create table\n");
+                exit(EXIT_FAILURE);
+        }
+        //freeq_table_print(ctx, tbl, stdout);
+        err = freeq_table_sendto_ssl(ctx, tbl);
+        dbg(ctx, "freeq_table_sendto_ssl returned %d\n", err);
+
+                printf("OK HERE\n");
+
+
         freeq_table_unref(tbl);
         closeproc(proc);
         freeq_unref(ctx);
@@ -140,10 +144,6 @@ procnothread(struct freeq_ctx *ctx, const char *machineip)
 int
 main(int argc, char *argv[])
 {
-        int optc;
-        int lose = 0;
-        const char *node_name = _("unknown");
-        const char *machineip = node_name;
         struct freeq_ctx *ctx;
         int err;
 
@@ -154,113 +154,24 @@ main(int argc, char *argv[])
         bindtextdomain (PACKAGE, LOCALEDIR);
         textdomain (PACKAGE);
 #endif
+        static stralloc identity = {0};
 
-        while ((optc = getopt_long(argc, argv, "g:hn:v", longopts, NULL)) != -1)
-                switch (optc)
-                {
-                case 'v':
-                        print_version();
-                        exit (EXIT_SUCCESS);
-                        break;
-                case 'n':
-                        node_name = optarg;
-                        break;
-                case 'h':
-                        print_help();
-                        exit (EXIT_SUCCESS);
-                        break;
-                default:
-                        lose = 1;
-                        break;
-                }
-
-        if (lose || optind < argc)
-        {
-                if (optind < argc)
-                        fprintf (stderr, _("%s: extra operand: %s\n"), program_name,
-                                 argv[optind]);
-                fprintf (stderr, _("Try `%s --help' for more information.\n"),
-                         program_name);
-                exit (EXIT_FAILURE);
-        }
-
-        err = freeq_new(&ctx, "system_monitor", machineip);
+        err = freeq_new(&ctx, "system_monitor", NULL);
         if (err < 0)
                 exit(EXIT_FAILURE);
 
-        freeq_set_identity(ctx, machineip);
+        err = control_readline(&identity, "control/identity");
+        if (!err)
+        {
+                err(ctx, "unable to read control/identity");
+                exit(FREEQ_ERR);
+        }
+
+        stralloc_0(&identity);
+        freeq_set_identity(ctx, identity.s);
         freeq_set_log_priority(ctx, 10);
-        procnothread(ctx, machineip);
+
+        procnothread(ctx, identity.s);
 
         return EXIT_SUCCESS;
-
-}
-
-static void
-print_help (void)
-{
-        /* TRANSLATORS: --help output 1 (synopsis)
-           no-wrap */
-        printf (_("\
-Usage: %s [OPTION]...\n"), program_name);
-
-        /* TRANSLATORS: --help output 2 (brief description)
-           no-wrap */
-        fputs (_("\
-Print a friendly, customizable greeting.\n"), stdout);
-
-        puts ("");
-        /* TRANSLATORS: --help output 3: options 1/2
-           no-wrap */
-        fputs (_("\
-  -h, --help          display this help and exit\n\
-  -v, --version       display version information and exit\n"), stdout);
-
-        puts ("");
-        /* TRANSLATORS: --help output 4: options 2/2
-           no-wrap */
-        fputs (_("\
-  -n, --nodename=TEXT     use TEXT as the node name\n"), stdout);
-
-        printf ("\n");
-        /* TRANSLATORS: --help output 5+ (reports)
-           TRANSLATORS: the placeholder indicates the bug-reporting address
-           for this application.  Please add _another line_ with the
-           address for translation bugs.
-           no-wrap */
-        printf (_("\
-Report bugs to: %s\n"), PACKAGE_BUGREPORT);
-#ifdef PACKAGE_PACKAGER_BUG_REPORTS
-        printf (_("Report %s bugs to: %s\n"), PACKAGE_PACKAGER,
-                PACKAGE_PACKAGER_BUG_REPORTS);
-#endif
-#ifdef PACKAGE_URL
-        printf (_("%s home page: <%s>\n"), PACKAGE_NAME, PACKAGE_URL);
-#else
-        printf (_("%s home page: <http://www.gnu.org/software/%s/>\n"),
-                PACKAGE_NAME, PACKAGE);
-#endif
-        fputs (_("General help using GNU software: <http://www.gnu.org/gethelp/>\n"),
-               stdout);
-}
-
-
-
-/* Print version and copyright information.  */
-
-static void
-print_version (void)
-{
-        printf ("%s (%s) %s\n", PACKAGE, PACKAGE_NAME, VERSION);
-        /* xgettext: no-wrap */
-        puts ("");
-
-        /* It is important to separate the year from the rest of the message,
-           as done here, to avoid having to retranslate the message when a new
-           year comes around.  */
-        printf (_("\
-Copyright (C) %d Free Software Foundation, Inc.\n\
-License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\n\
-This is free software: you are free to change and redistribute it.\n\
-There is NO WARRANTY, to the extent permitted by law.\n"), COPYRIGHT_YEAR);
 }

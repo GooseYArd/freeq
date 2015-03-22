@@ -38,5 +38,5 @@ check_basic.trs
 check_msgpack
 check_msgpack.log
 check_msgpack.trs
-control/*.pem
+control
 TAGS

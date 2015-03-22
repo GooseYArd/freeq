@@ -8,16 +8,16 @@ dnl This program is distributed in the hope that it will be useful, but
 dnl WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
 dnl implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-AC_INIT([Freeq], 
-        [0.1], 
+AC_INIT([Freeq],
+        [0.1],
         [gooseyard@gmail.com],[],
         [http://go.c800colon5.com/freeq])
 
 dnl Must come before AM_INIT_AUTOMAKE.
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([
-        1.11.1 
-        readme-alpha 
+        1.11.1
+        readme-alpha
         parallel-tests
         subdir-objects
 ])
@@ -31,7 +31,6 @@ AC_CONFIG_SRCDIR([src/libfreeq.c])
 
 dnl AC_PROG_CC
 AC_PROG_CC_C99
-AC_PROG_CXX
 
 dnl Since we use gnulib: gl_EARLY must be called as soon as possible after
 dnl the C compiler is checked.  The others could be later, but we just
@@ -48,22 +47,20 @@ AC_DEFINE([COPYRIGHT_YEAR], [m4_esyscmd([date +%Y])], [year in copyright message
 AX_LIB_SQLITE4
 
 AS_IF([test "x$ac_sqlite4_version" == "x"],
-	    [AC_MSG_ERROR([Unable to locate sqlite4])])
+            [AC_MSG_ERROR([Unable to locate sqlite4])])
 
 AC_SEARCH_LIBS([nn_socket], [nanomsg], [], [
   AC_MSG_ERROR([unable to find the nn_socket() function])
 ])
 
 AC_CHECK_HEADERS([nanomsg/nn.h nanomsg/survey.h],
-			   [found_nanomsg_headers=yes; break;])
+                           [found_nanomsg_headers=yes; break;])
 
 AS_IF([test "x$found_nanomsg_headers" != "xyes"],
-	    [AC_MSG_ERROR([Unable to find the standard nanomsg headers])])
+            [AC_MSG_ERROR([Unable to find the standard nanomsg headers])])
 
 PKG_CHECK_MODULES(GLIB, glib-2.0)
 PKG_CHECK_MODULES(PROCPS, libprocps)
-
-AX_CXX_COMPILE_STDCXX_11
 
 PKG_CHECK_MODULES([CHECK], [check >= 0.9.4])
 

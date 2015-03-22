@@ -50,11 +50,11 @@
 #define DEFAULT_STRCHUNK_LENGTH 8
 
 const char *coltypes[] = { "null",
-			   "string",
-			   "number",
-			   "time",
-			   "ipv4_addr",
-			   "ipv6_addr" };
+                           "string",
+                           "number",
+                           "time",
+                           "ipv4_addr",
+                           "ipv6_addr" };
 
 unsigned int bio_wrap(struct freeq_ctx *ctx, struct freeq_table *tbl, SSL *ssl);
 
@@ -82,91 +82,91 @@ DH *dh1024 = NULL;
  * Opaque object representing the library context.
  */
 struct freeq_ctx {
-	int refcount;
-	void (*log_fn)(struct freeq_ctx *ctx,
-		       int priority, const char *file, int line, const char *fn,
-		       const char *format, va_list args);
-	void* userdata;
-	const char *identity;
-	const char* appname;
-	SSL_CTX *sslctx;
-	int log_priority;
+        int refcount;
+        void (*log_fn)(struct freeq_ctx *ctx,
+                       int priority, const char *file, int line, const char *fn,
+                       const char *format, va_list args);
+        void* userdata;
+        const char *identity;
+        const char* appname;
+        SSL_CTX *sslctx;
+        int log_priority;
 };
 
 typedef struct {
-	char vibuf[10];
-	char vibuf32[5];
+        char vibuf[10];
+        char vibuf32[5];
 } vibuf_t;
 
 void destroy_sender_table(gpointer data) {
-	GHashTable *senders = (GHashTable*)data;
-	g_hash_table_destroy(senders);
+        GHashTable *senders = (GHashTable*)data;
+        g_hash_table_destroy(senders);
 }
 
 FREEQ_EXPORT int freeq_generation_new(freeq_generation_t **gen)
 {
-	freeq_generation_t *g = malloc(sizeof(freeq_generation_t));
-	if (g == NULL)
-		return 1;
+        freeq_generation_t *g = malloc(sizeof(freeq_generation_t));
+        if (g == NULL)
+                return 1;
 
-	g->tables = g_hash_table_new_full(g_str_hash,
-					  g_str_equal,
-					  g_free,
-					  (GDestroyNotify)destroy_sender_table);
-	g->strings = g_string_chunk_new(8);
-	if (g->strings == NULL)
-		return -ENOMEM;
+        g->tables = g_hash_table_new_full(g_str_hash,
+                                          g_str_equal,
+                                          g_free,
+                                          (GDestroyNotify)destroy_sender_table);
+        g->strings = g_string_chunk_new(8);
+        if (g->strings == NULL)
+                return -ENOMEM;
 
-	g_rw_lock_init(&(g->rw_lock));
-	g->refcount = 1;
-	g->era = time(NULL);
-	*gen = g;
-	return 0;
+        g_rw_lock_init(&(g->rw_lock));
+        g->refcount = 1;
+        g->era = time(NULL);
+        *gen = g;
+        return 0;
 }
 
 FREEQ_EXPORT void freeq_generation_unref(freeq_generation_t *gen)
 {
-	if (gen->refcount == 1)
-	{
-		g_hash_table_destroy(gen->tables);
-		g_rw_lock_clear(&(gen->rw_lock));
-	}
+        if (gen->refcount == 1)
+        {
+                g_hash_table_destroy(gen->tables);
+                g_rw_lock_clear(&(gen->rw_lock));
+        }
 
 }
 
 FREEQ_EXPORT void freeq_log(struct freeq_ctx *ctx,
-			    int priority, const char *file, int line, const char *fn,
-			    const char *format, ...)
+                            int priority, const char *file, int line, const char *fn,
+                            const char *format, ...)
 {
-	va_list args;
+        va_list args;
 
-	va_start(args, format);
-	ctx->log_fn(ctx, priority, file, line, fn, format, args);
-	va_end(args);
+        va_start(args, format);
+        ctx->log_fn(ctx, priority, file, line, fn, format, args);
+        va_end(args);
 }
 
 static void log_stderr(struct freeq_ctx *ctx,
-		       int priority, const char *file, int line, const char *fn,
-		       const char *format, va_list args)
+                       int priority, const char *file, int line, const char *fn,
+                       const char *format, va_list args)
 {
-	fprintf(stderr, "libfreeq: %s: ", fn);
-	vfprintf(stderr, format, args);
+        fprintf(stderr, "libfreeq: %s: ", fn);
+        vfprintf(stderr, format, args);
 }
 
 void
 dezigzag64(struct longlong *r)
 {
-	uint32_t low = r->low;
-	r->low = ((low >> 1) | ((r->hi & 1) << 31)) ^ - (low & 1);
-	r->hi = (r->hi >> 1) ^ - (low & 1);
+        uint32_t low = r->low;
+        r->low = ((low >> 1) | ((r->hi & 1) << 31)) ^ - (low & 1);
+        r->hi = (r->hi >> 1) ^ - (low & 1);
 }
 
 void
 dezigzag32(struct longlong *r)
 {
-	uint32_t low = r->low;
-	r->low = (low >> 1) ^ - (low & 1);
-	r->hi = -(low >> 31);
+        uint32_t low = r->low;
+        r->low = (low >> 1) ^ - (low & 1);
+        r->hi = -(low >> 31);
 }
 
 /* This code was shamelessly stolen and adapted from beautiful C-only
@@ -174,162 +174,162 @@ dezigzag32(struct longlong *r)
    https://github.com/cloudwu/pbc */
 
 typedef struct {
-	char data[5];
+        char data[5];
 } varint32_buf_t;
 
 typedef struct {
-	char data[10];
+        char data[10];
 } varint_buf_t;
 
 static inline int
 encode_varint32(varint32_buf_t *b, uint32_t number)
 {
-	if (number < 0x80) {
-		b->data[0] = (uint8_t) number;
-		return 1;
-	}
-	b->data[0] = (uint8_t) (number | 0x80 );
-	if (number < 0x4000) {
-		b->data[1] = (uint8_t) (number >> 7 );
-		return 2;
-	}
-	b->data[1] = (uint8_t) ((number >> 7) | 0x80 );
-	if (number < 0x200000) {
-		b->data[2] = (uint8_t) (number >> 14);
-		return 3;
-	}
-	b->data[2] = (uint8_t) ((number >> 14) | 0x80 );
-	if (number < 0x10000000) {
-		b->data[3] = (uint8_t) (number >> 21);
-		return 4;
-	}
-	b->data[3] = (uint8_t) ((number >> 21) | 0x80 );
-	b->data[4] = (uint8_t) (number >> 28);
-	return 5;
+        if (number < 0x80) {
+                b->data[0] = (uint8_t) number;
+                return 1;
+        }
+        b->data[0] = (uint8_t) (number | 0x80 );
+        if (number < 0x4000) {
+                b->data[1] = (uint8_t) (number >> 7 );
+                return 2;
+        }
+        b->data[1] = (uint8_t) ((number >> 7) | 0x80 );
+        if (number < 0x200000) {
+                b->data[2] = (uint8_t) (number >> 14);
+                return 3;
+        }
+        b->data[2] = (uint8_t) ((number >> 14) | 0x80 );
+        if (number < 0x10000000) {
+                b->data[3] = (uint8_t) (number >> 21);
+                return 4;
+        }
+        b->data[3] = (uint8_t) ((number >> 21) | 0x80 );
+        b->data[4] = (uint8_t) (number >> 28);
+        return 5;
 }
 
 static inline int
 encode_varint(varint_buf_t *b, uint64_t number)
 {
-	if ((number & 0xffffffff) == number) {
-		return encode_varint32((varint32_buf_t *)b, (uint32_t)number);
-	}
-	int i = 0;
-	do {
-		b->data[i] = (uint8_t)(number | 0x80);
-		number >>= 7;
-		++i;
-	} while (number >= 0x80);
-	b->data[i] = (uint8_t)number;
-	return i+1;
+        if ((number & 0xffffffff) == number) {
+                return encode_varint32((varint32_buf_t *)b, (uint32_t)number);
+        }
+        int i = 0;
+        do {
+                b->data[i] = (uint8_t)(number | 0x80);
+                number >>= 7;
+                ++i;
+        } while (number >= 0x80);
+        b->data[i] = (uint8_t)number;
+        return i+1;
 }
 
 static inline int
 encode_varintsigned32(varint32_buf_t *buffer, int32_t n)
 {
-	n = (n << 1) ^ (n >> 31);
-	return encode_varint32(buffer,n);
+        n = (n << 1) ^ (n >> 31);
+        return encode_varint32(buffer,n);
 }
 
 static inline int
 encode_varintsigned(varint_buf_t *buffer, int64_t n)
 {
-	n = (n << 1) ^ (n >> 63);
-	return encode_varint(buffer,n);
+        n = (n << 1) ^ (n >> 63);
+        return encode_varint(buffer,n);
 }
 
 FREEQ_EXPORT int
 BIO_write_varint32(BIO *b, uint32_t number)
 {
-	varint32_buf_t buf;
-	int len = encode_varint32(&buf, number);
-	return BIO_write(b, &buf, len);
+        varint32_buf_t buf;
+        int len = encode_varint32(&buf, number);
+        return BIO_write(b, &buf, len);
 }
 
 FREEQ_EXPORT int
 BIO_write_varint(BIO *b, uint64_t number)
 {
-	varint_buf_t buf;
-	int len = encode_varint(&buf, number);
-	return BIO_write(b, &buf, len);
+        varint_buf_t buf;
+        int len = encode_varint(&buf, number);
+        return BIO_write(b, &buf, len);
 }
 
 FREEQ_EXPORT int
 BIO_write_varintsigned32(BIO *b, uint32_t number)
 {
-	varint32_buf_t buf;
-	int len = encode_varintsigned32(&buf, number);
-	return BIO_write(b, &buf, len);
+        varint32_buf_t buf;
+        int len = encode_varintsigned32(&buf, number);
+        return BIO_write(b, &buf, len);
 }
 
 FREEQ_EXPORT int
 BIO_write_varintsigned(BIO *b, int64_t number)
 {
-	varint_buf_t buf;
-	int len = encode_varintsigned(&buf, number);
-	return BIO_write(b, &buf, len);
+        varint_buf_t buf;
+        int len = encode_varintsigned(&buf, number);
+        return BIO_write(b, &buf, len);
 }
 
 FREEQ_EXPORT ssize_t
 BIO_write_vstr(BIO *b, const char *s)
 {
-	int pos = 0;
-	ssize_t slen;
-	const char zero = 0;
+        int pos = 0;
+        ssize_t slen;
+        const char zero = 0;
 
-	if (s == NULL)
-	{
-		pos += BIO_write(b, &zero, 1);
-	}
-	else
-	{
-		slen = strlen(s);
-		pos += BIO_write_varint32(b, slen);
-		pos += BIO_write(b, s, slen);
-	}
-	return pos;
+        if (s == NULL)
+        {
+                pos += BIO_write(b, &zero, 1);
+        }
+        else
+        {
+                slen = strlen(s);
+                pos += BIO_write_varint32(b, slen);
+                pos += BIO_write(b, s, slen);
+        }
+        return pos;
 }
 
 ssize_t
 BIO_read_varint(BIO *b, struct longlong *result) {
-	int err;
-	char x;
+        int err;
+        char x;
 
-	if (!(err = BIO_read(b, &x, 1)))
-	{
-		fprintf(stderr, "tried to read one byte from bio, got %d\n", err);
-		return 0;
-	}
+        if (!(err = BIO_read(b, &x, 1)))
+        {
+                fprintf(stderr, "tried to read one byte from bio, got %d\n", err);
+                return 0;
+        }
 
-	if (!(x & 0x80)) {
-		result->low = x;
-		result->hi = 0;
-		return 1;
-	}
-	uint32_t r = x & 0x7f;
-	int i;
-	for (i=1;i<4;i++) {
-		BIO_read(b, &x, 1);
-		r |= ((x&0x7f) << (7*i));
-		if (!(x & 0x80)) {
-			result->low = r;
-			result->hi = 0;
-			return i+1;
-		}
-	}
-	uint64_t lr = 0;
-	for (i=4;i<10;i++) {
-		BIO_read(b, &x, 1);
-		lr |= ((uint64_t)(x & 0x7f) << (7*(i-4)));
-		if (!(x & 0x80)) {
-			result->hi = (uint32_t)(lr >> 4);
-			result->low = r | (((uint32_t)lr & 0xf) << 28);
-			return i+1;
-		}
-	}
-	result->low = 0;
-	result->hi = 0;
-	return 10;
+        if (!(x & 0x80)) {
+                result->low = x;
+                result->hi = 0;
+                return 1;
+        }
+        uint32_t r = x & 0x7f;
+        int i;
+        for (i=1;i<4;i++) {
+                BIO_read(b, &x, 1);
+                r |= ((x&0x7f) << (7*i));
+                if (!(x & 0x80)) {
+                        result->low = r;
+                        result->hi = 0;
+                        return i+1;
+                }
+        }
+        uint64_t lr = 0;
+        for (i=4;i<10;i++) {
+                BIO_read(b, &x, 1);
+                lr |= ((uint64_t)(x & 0x7f) << (7*(i-4)));
+                if (!(x & 0x80)) {
+                        result->hi = (uint32_t)(lr >> 4);
+                        result->low = r | (((uint32_t)lr & 0xf) << 28);
+                        return i+1;
+                }
+        }
+        result->low = 0;
+        result->hi = 0;
+        return 10;
 }
 
 /**
@@ -343,9 +343,9 @@ BIO_read_varint(BIO *b, struct longlong *result) {
  **/
 FREEQ_EXPORT const char *freeq_get_identity(struct freeq_ctx *ctx)
 {
-	if (ctx == NULL)
-		return NULL;
-	return ctx->identity;
+        if (ctx == NULL)
+                return NULL;
+        return ctx->identity;
 }
 
 /**
@@ -357,86 +357,86 @@ FREEQ_EXPORT const char *freeq_get_identity(struct freeq_ctx *ctx)
  **/
 FREEQ_EXPORT void freeq_set_identity(struct freeq_ctx *ctx, const char *identity)
 {
-	if (ctx == NULL)
-		return;
-	ctx->identity = identity;
+        if (ctx == NULL)
+                return;
+        ctx->identity = identity;
 }
 
 static int log_priority(const char *priority)
 {
-	char *endptr;
-	int prio;
+        char *endptr;
+        int prio;
 
-	prio = strtol(priority, &endptr, 10);
-	if (endptr[0] == '\0' || isspace(endptr[0]))
-		return prio;
-	if (strncmp(priority, "err", 3) == 0)
-		return LOG_ERR;
-	if (strncmp(priority, "info", 4) == 0)
-		return LOG_INFO;
-	if (strncmp(priority, "debug", 5) == 0)
-		return LOG_DEBUG;
-	return 0;
+        prio = strtol(priority, &endptr, 10);
+        if (endptr[0] == '\0' || isspace(endptr[0]))
+                return prio;
+        if (strncmp(priority, "err", 3) == 0)
+                return LOG_ERR;
+        if (strncmp(priority, "info", 4) == 0)
+                return LOG_INFO;
+        if (strncmp(priority, "debug", 5) == 0)
+                return LOG_DEBUG;
+        return 0;
 }
 
 void init_dhparams(void) {
     BIO *bio;
     bio = BIO_new_file("control/dh512.pem", "r");
     if (!bio)
-	int_error("Error opening file dh512.pem");
+        int_error("Error opening file dh512.pem");
     dh512 = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
     if (!dh512)
-	int_error("Error reading DH parameters from dh512.pem");
+        int_error("Error reading DH parameters from dh512.pem");
     BIO_free(bio);
     bio = BIO_new_file("control/dh1024.pem", "r");
     if (!bio)
-	int_error("Error opening file dh1024.pem");
+        int_error("Error opening file dh1024.pem");
     dh1024 = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
     if (!dh1024)
-	int_error("Error reading DH parameters from dh1024.pem");
+        int_error("Error reading DH parameters from dh1024.pem");
     BIO_free(bio);
 }
 DH *tmp_dh_callback(SSL *ssl, int is_export, int keylength)
 {
     DH *ret;
     if (!dh512 || !dh1024)
-	init_dhparams();
+        init_dhparams();
 
     switch (keylength) {
     case 512:
-	ret = dh512;
-	break;
+        ret = dh512;
+        break;
     case 1024:
     default:
-	ret = dh1024;
-	break;
+        ret = dh1024;
+        break;
     }
     return ret;
 }
 
 static struct CRYPTO_dynlock_value * dyn_create_function(const char *file,
-							 int line)
+                                                         int line)
 {
     struct CRYPTO_dynlock_value *value;
     value = (struct CRYPTO_dynlock_value *)malloc(sizeof(struct CRYPTO_dynlock_value));
     if (!value)
-	return NULL;
+        return NULL;
 
     pthread_mutex_init(&(value->mutex), NULL);
     return value;
 }
 static void dyn_lock_function(int mode,
-			      struct CRYPTO_dynlock_value *l,
-			      const char *file,
-			      int line)
+                              struct CRYPTO_dynlock_value *l,
+                              const char *file,
+                              int line)
 {
     if (mode & CRYPTO_LOCK)
-	pthread_mutex_lock(&(l->mutex));
+        pthread_mutex_lock(&(l->mutex));
     else
-	pthread_mutex_unlock(&(l->mutex));
+        pthread_mutex_unlock(&(l->mutex));
 }
 static void dyn_destroy_function(struct CRYPTO_dynlock_value *l,
-				 const char *file, int line)
+                                 const char *file, int line)
 {
     pthread_mutex_destroy(&(l->mutex));
     free(l);
@@ -448,46 +448,44 @@ SSL_CTX *setup_client_ctx(void)
 
     ctx = SSL_CTX_new(SSLv23_method(  ));
     if (SSL_CTX_load_verify_locations(ctx, CAFILE, CADIR) != 1)
-	int_error("Error loading CA file and/or directory");
+        int_error("Error loading CA file and/or directory");
     if (SSL_CTX_set_default_verify_paths(ctx) != 1)
-	int_error("Error loading default CA file and/or directory");
+        int_error("Error loading default CA file and/or directory");
     if (SSL_CTX_use_certificate_chain_file(ctx, CERTFILE) != 1)
-	int_error("Error loading certificate from file");
+        int_error("Error loading certificate from file");
     if (SSL_CTX_use_PrivateKey_file(ctx, CERTFILE, SSL_FILETYPE_PEM) != 1)
-	int_error("Error loading private key from file");
+        int_error("Error loading private key from file");
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, verify_callback);
     SSL_CTX_set_verify_depth(ctx, 4);
     SSL_CTX_set_options(ctx, SSL_OP_ALL|SSL_OP_NO_SSLv2);
     if (SSL_CTX_set_cipher_list(ctx, CIPHER_LIST) != 1)
-	int_error("Error setting cipher list (no valid ciphers)");
+        int_error("Error setting cipher list (no valid ciphers)");
     return ctx;
 }
 
 SSL_CTX *setup_server_ctx(void)
 {
     SSL_CTX *ctx;
-
-    fprintf(stderr, "ABOUT TO ALLOCATE SSL CTX...");
     if (!(ctx = SSL_CTX_new(SSLv23_method()))) {
-	    int_error("Unable to create new SSL CTX!");
+        int_error("Unable to create new SSL CTX!");
     }
 
     if (SSL_CTX_load_verify_locations(ctx, CAFILE, CADIR) != 1)
-	int_error("Error loading CA file and/or directory");
+        int_error("Error loading CA file and/or directory");
     if (SSL_CTX_set_default_verify_paths(ctx) != 1)
-	int_error("Error loading default CA file and/or directory");
+        int_error("Error loading default CA file and/or directory");
     if (SSL_CTX_use_certificate_chain_file(ctx, CERTFILE) != 1)
-	int_error("Error loading certificate from file");
+        int_error("Error loading certificate from file");
     if (SSL_CTX_use_PrivateKey_file(ctx, CERTFILE, SSL_FILETYPE_PEM) != 1)
-	int_error("Error loading private key from file");
+        int_error("Error loading private key from file");
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
-		       verify_callback);
+                       verify_callback);
     SSL_CTX_set_verify_depth(ctx, 4);
     SSL_CTX_set_options(ctx, SSL_OP_ALL | SSL_OP_NO_SSLv2 |
-			SSL_OP_SINGLE_DH_USE);
+                        SSL_OP_SINGLE_DH_USE);
     SSL_CTX_set_tmp_dh_callback(ctx, tmp_dh_callback);
     if (SSL_CTX_set_cipher_list(ctx, CIPHER_LIST) != 1)
-	int_error("Error setting cipher list (no valid ciphers)");
+        int_error("Error setting cipher list (no valid ciphers)");
 
     return ctx;
 }
@@ -497,72 +495,72 @@ FREEQ_EXPORT
 int
 freeq_ssl_query(struct freeq_ctx *ctx, const char *server, const char *sql, struct freeq_table **t)
 {
-	BIO     *conn;
-	SSL     *ssl;
-	long    err;
-	struct freeq_table *tbl;
+        BIO     *conn;
+        SSL     *ssl;
+        long    err;
+        struct freeq_table *tbl;
 
-	dbg(ctx, "freeq_ssl_query: %s\n", sql);
-	conn = BIO_new_connect("localhost:13002");
-	if (!conn)
-	{
-		int_error("Error creating connection BIO");
-		return FREEQ_ERR;
-	}
+        dbg(ctx, "freeq_ssl_query: %s\n", sql);
+        conn = BIO_new_connect("localhost:13002");
+        if (!conn)
+        {
+                int_error("Error creating connection BIO");
+                return FREEQ_ERR;
+        }
 
-	if (BIO_do_connect(conn) <= 0)
-	{
-		// FREE conn
-		int_error("Error connecting to remote machine");
-		return FREEQ_ERR;
-	}
-	ssl = SSL_new(ctx->sslctx);
-	SSL_set_bio(ssl, conn, conn);
+        if (BIO_do_connect(conn) <= 0)
+        {
+                // FREE conn
+                int_error("Error connecting to remote machine");
+                return FREEQ_ERR;
+        }
+        ssl = SSL_new(ctx->sslctx);
+        SSL_set_bio(ssl, conn, conn);
 
-	if (SSL_connect(ssl) <= 0)
-	{
-		int_error("Error connecting SSL object");
-		return FREEQ_ERR;
-	}
+        if (SSL_connect(ssl) <= 0)
+        {
+                int_error("Error connecting SSL object");
+                return FREEQ_ERR;
+        }
 
-	if ((err = post_connection_check(ctx, ssl, server)) != X509_V_OK)
-	{
-		fprintf(stderr, "-Error: peer certificate: %s\n",
-			X509_verify_cert_error_string(err));
-		int_error("Error checking SSL object after connection");
-		return FREEQ_ERR;
-	}
+        if ((err = post_connection_check(ctx, ssl, server)) != X509_V_OK)
+        {
+                fprintf(stderr, "-Error: peer certificate: %s\n",
+                        X509_verify_cert_error_string(err));
+                int_error("Error checking SSL object after connection");
+                return FREEQ_ERR;
+        }
 
-	BIO  *buf_io, *ssl_bio;
-	buf_io = BIO_new(BIO_f_buffer());
-	ssl_bio = BIO_new(BIO_f_ssl());
-	BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE);
-	BIO_push(buf_io, ssl_bio);
+        BIO  *buf_io, *ssl_bio;
+        buf_io = BIO_new(BIO_f_buffer());
+        ssl_bio = BIO_new(BIO_f_ssl());
+        BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE);
+        BIO_push(buf_io, ssl_bio);
 
-	err = BIO_puts(buf_io, sql);
-	dbg(ctx, "wrote query \"%s\" %ld reading...\n", sql, err);
-	if ((err = BIO_flush(buf_io)) < 0)
-	{
-		err(ctx, "Error flushing BIO");
-	}
+        err = BIO_puts(buf_io, sql);
+        dbg(ctx, "wrote query \"%s\" %ld reading...\n", sql, err);
+        if ((err = BIO_flush(buf_io)) < 0)
+        {
+                err(ctx, "Error flushing BIO");
+        }
 
-	err = freeq_table_bio_read(ctx, &tbl, buf_io, NULL);
+        err = freeq_table_bio_read(ctx, &tbl, buf_io, NULL);
 
-	SSL_shutdown(ssl);
-	SSL_free(ssl);
-	//SSL_CTX_free(sslctx);
+        SSL_shutdown(ssl);
+        SSL_free(ssl);
+        //SSL_CTX_free(sslctx);
 
-	*t = tbl;
-	return err;
+        *t = tbl;
+        return err;
 
 }
 
 static void locking_function(int mode, int n, const char * file, int line)
 {
     if (mode & CRYPTO_LOCK)
-	pthread_mutex_lock(&(mutex_buf[n]));
+        pthread_mutex_lock(&(mutex_buf[n]));
     else
-	pthread_mutex_unlock(&(mutex_buf[n]));
+        pthread_mutex_unlock(&(mutex_buf[n]));
 }
 
 static unsigned long id_function(void)
@@ -573,36 +571,36 @@ static unsigned long id_function(void)
 FREEQ_EXPORT
 SSL *freeq_ssl_new(struct freeq_ctx *ctx)
 {
-	return SSL_new(ctx->sslctx);
+        return SSL_new(ctx->sslctx);
 }
 
 FREEQ_EXPORT
 int freeq_init_ssl(struct freeq_ctx *ctx)
 {
-	if (ssl_initialized)
-		return true;
-	mutex_buf = (pthread_mutex_t *)malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t));
-	if (!mutex_buf)
-		exit(1);
+        if (ssl_initialized)
+                return true;
+        mutex_buf = (pthread_mutex_t *)malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t));
+        if (!mutex_buf)
+                exit(1);
 
-	for (int i = 0; i < CRYPTO_num_locks(); i++)
-		pthread_mutex_init(&(mutex_buf[i]), NULL) ;
+        for (int i = 0; i < CRYPTO_num_locks(); i++)
+                pthread_mutex_init(&(mutex_buf[i]), NULL) ;
 
-	CRYPTO_set_id_callback(id_function);
-	CRYPTO_set_locking_callback(locking_function);
-	CRYPTO_set_dynlock_create_callback(dyn_create_function);
-	CRYPTO_set_dynlock_lock_callback(dyn_lock_function);
-	CRYPTO_set_dynlock_destroy_callback(dyn_destroy_function);
+        CRYPTO_set_id_callback(id_function);
+        CRYPTO_set_locking_callback(locking_function);
+        CRYPTO_set_dynlock_create_callback(dyn_create_function);
+        CRYPTO_set_dynlock_lock_callback(dyn_lock_function);
+        CRYPTO_set_dynlock_destroy_callback(dyn_destroy_function);
 
-	SSL_library_init();
-	SSL_load_error_strings();
-	seed_prng();
+        SSL_library_init();
+        SSL_load_error_strings();
+        seed_prng();
 
-	//ctx->sslctx = setup_client_ctx();
-	ctx->sslctx = setup_server_ctx();
+        //ctx->sslctx = setup_client_ctx();
+        ctx->sslctx = setup_server_ctx();
 
-	ssl_initialized = true;
-	return 0;
+        ssl_initialized = true;
+        return 0;
 }
 
 /**
@@ -618,33 +616,33 @@ int freeq_init_ssl(struct freeq_ctx *ctx)
  **/
 FREEQ_EXPORT int freeq_new(struct freeq_ctx **ctx, const char *appname, const char *identity)
 {
-	const char *env;
-	struct freeq_ctx *c;
+        const char *env;
+        struct freeq_ctx *c;
 
-	c = calloc(1, sizeof(struct freeq_ctx));
-	if (!c)
-		return -ENOMEM;
+        c = calloc(1, sizeof(struct freeq_ctx));
+        if (!c)
+                return -ENOMEM;
 
-	c->refcount = 1;
-	c->log_fn = log_stderr;
-	c->log_priority = LOG_ERR;
-	c->appname = appname;
-	c->identity = identity;
+        c->refcount = 1;
+        c->log_fn = log_stderr;
+        c->log_priority = LOG_ERR;
+        c->appname = appname;
+        c->identity = identity;
 
-	/* environment overwrites config */
-	env = secure_getenv("FREEQ_LOG");
-	if (env != NULL)
-		freeq_set_log_priority(c, log_priority(env));
+        /* environment overwrites config */
+        env = secure_getenv("FREEQ_LOG");
+        if (env != NULL)
+                freeq_set_log_priority(c, log_priority(env));
 
-	if (identity == NULL)
-		identity = secure_getenv("HOSTNAME");
+        if (identity == NULL)
+                identity = secure_getenv("HOSTNAME");
 
-	freeq_set_identity(c, identity ? identity : "unknown");
-	info(c, "ctx %p created\n", c);
-	//dbg(c, "log_priority=%d\n", c->log_priority);
-	freeq_init_ssl(c);
-	*ctx = c;
-	return 0;
+        freeq_set_identity(c, identity ? identity : "unknown");
+        info(c, "ctx %p created\n", c);
+        //dbg(c, "log_priority=%d\n", c->log_priority);
+        freeq_init_ssl(c);
+        *ctx = c;
+        return 0;
 }
 
 /**
@@ -657,10 +655,10 @@ FREEQ_EXPORT int freeq_new(struct freeq_ctx **ctx, const char *appname, const ch
  **/
 FREEQ_EXPORT struct freeq_ctx *freeq_ref(struct freeq_ctx *ctx)
 {
-	if (ctx == NULL)
-		return NULL;
-	ctx->refcount++;
-	return ctx;
+        if (ctx == NULL)
+                return NULL;
+        ctx->refcount++;
+        return ctx;
 }
 
 /**
@@ -672,14 +670,14 @@ FREEQ_EXPORT struct freeq_ctx *freeq_ref(struct freeq_ctx *ctx)
  **/
 FREEQ_EXPORT struct freeq_ctx *freeq_unref(struct freeq_ctx *ctx)
 {
-	if (ctx == NULL)
-		return NULL;
-	ctx->refcount--;
-	if (ctx->refcount > 0)
-		return NULL;
-	info(ctx, "context %p released\n", ctx);
-	free(ctx);
-	return NULL;
+        if (ctx == NULL)
+                return NULL;
+        ctx->refcount--;
+        if (ctx->refcount > 0)
+                return NULL;
+        info(ctx, "context %p released\n", ctx);
+        free(ctx);
+        return NULL;
 }
 
 /**
@@ -693,13 +691,13 @@ FREEQ_EXPORT struct freeq_ctx *freeq_unref(struct freeq_ctx *ctx)
  *
  **/
 FREEQ_EXPORT void freeq_set_log_fn(struct freeq_ctx *ctx,
-			      void (*log_fn)(struct freeq_ctx *ctx,
-					     int priority, const char *file,
-					     int line, const char *fn,
-					     const char *format, va_list args))
+                              void (*log_fn)(struct freeq_ctx *ctx,
+                                             int priority, const char *file,
+                                             int line, const char *fn,
+                                             const char *format, va_list args))
 {
-	ctx->log_fn = log_fn;
-	info(ctx, "custom logging function %p registered\n", log_fn);
+        ctx->log_fn = log_fn;
+        info(ctx, "custom logging function %p registered\n", log_fn);
 }
 
 /**
@@ -710,7 +708,7 @@ FREEQ_EXPORT void freeq_set_log_fn(struct freeq_ctx *ctx,
  **/
 FREEQ_EXPORT int freeq_get_log_priority(struct freeq_ctx *ctx)
 {
-	return ctx->log_priority;
+        return ctx->log_priority;
 }
 
 /**
@@ -732,165 +730,165 @@ FREEQ_EXPORT void freeq_set_log_priority(struct freeq_ctx *ctx, int priority)
 
 FREEQ_EXPORT struct freeq_table *freeq_table_ref(struct freeq_table *table)
 {
-	if (!table)
-		return NULL;
-	table->refcount++;
-	return table;
+        if (!table)
+                return NULL;
+        table->refcount++;
+        return table;
 }
 
 FREEQ_EXPORT struct freeq_table *freeq_table_unref(struct freeq_table *table)
 {
-	if (table == NULL)
-		return NULL;
+        if (table == NULL)
+                return NULL;
 
-	table->refcount--;
-	if (table->refcount > 0)
-		return NULL;
+        table->refcount--;
+        if (table->refcount > 0)
+                return NULL;
 
-	free(table->name);
-	for (int i=0; i < table->numcols; i++)
-		free(table->columns[i].name);
+        free(table->name);
+        for (int i=0; i < table->numcols; i++)
+                free(table->columns[i].name);
 
-	if (table->destroy_data)
-	{
-		for (int i=0; i < table->numcols; i++)
-		{
-			dbg(table->ctx, "freeing column %d data\n", i);
-			g_slist_free(table->columns[i].data);
+        if (table->destroy_data)
+        {
+                for (int i=0; i < table->numcols; i++)
+                {
+                        dbg(table->ctx, "freeing column %d data\n", i);
+                        g_slist_free(table->columns[i].data);
 //			if (table->columns[i].coltype == FREEQ_COL_STRING)
 //			{
 //				g_slist_free_full(table->columns[i].data, g_free);
 //			}
 //			else
-		}
-		if (table->strings != NULL)
-			g_string_chunk_free(table->strings);
-	}
-	else
-		dbg(table->ctx, "destroy_data not set, not freeing column data\n");
+                }
+                if (table->strings != NULL)
+                        g_string_chunk_free(table->strings);
+        }
+        else
+                dbg(table->ctx, "destroy_data not set, not freeing column data\n");
 
-	dbg(table->ctx, "table %p released\n", table);
-	free(table);
-	return NULL;
+        dbg(table->ctx, "table %p released\n", table);
+        free(table);
+        return NULL;
 }
 
 FREEQ_EXPORT struct freeq_ctx *freeq_table_get_ctx(struct freeq_table *table)
 {
-	return table->ctx;
+        return table->ctx;
 }
 
 FREEQ_EXPORT int freeq_error_write_sock(struct freeq_ctx *ctx, const char *errmsg, BIO *b)
 {
-	struct freeq_table errtbl;
+        struct freeq_table errtbl;
 
-	//freeq_coltype_t coltypes[] = { FREEQ_COL_STRING };
-	//char *colnames[] = { "error" };
+        //freeq_coltype_t coltypes[] = { FREEQ_COL_STRING };
+        //char *colnames[] = { "error" };
 
-	errtbl.name = "error";
-	errtbl.numcols = 1;
-	errtbl.numrows = 1;
+        errtbl.name = "error";
+        errtbl.numcols = 1;
+        errtbl.numrows = 1;
 
-	dbg(ctx, "generated error table, sending...\n");
-	return freeq_table_bio_write(ctx, &errtbl, b);
+        dbg(ctx, "generated error table, sending...\n");
+        return freeq_table_bio_write(ctx, &errtbl, b);
 }
 
 bool ragged(int c, int rlens[], uint32_t *min) {
-	*min = rlens[0];
-	bool ragged = false;
+        *min = rlens[0];
+        bool ragged = false;
 
-	for (int i = 0; i < c; i++) {
-		if (rlens[i] < *min) {
-			*min = rlens[i];
-			ragged = true;
-		}
-	}
-	return ragged;
+        for (int i = 0; i < c; i++) {
+                if (rlens[i] < *min) {
+                        *min = rlens[i];
+                        ragged = true;
+                }
+        }
+        return ragged;
 }
 
 FREEQ_EXPORT int freeq_table_new(struct freeq_ctx *ctx,
-				 const char *name,
-				 int numcols,
-				 freeq_coltype_t coltypes[],
-				 const char *colnames[],
-				 struct freeq_table **table,
-				 bool destroy_data,
-				 ...)
+                                 const char *name,
+                                 int numcols,
+                                 freeq_coltype_t coltypes[],
+                                 const char *colnames[],
+                                 struct freeq_table **table,
+                                 bool destroy_data,
+                                 ...)
 {
-	va_list argp;
-	int collens[numcols];
-	struct freeq_table *t;
+        va_list argp;
+        int collens[numcols];
+        struct freeq_table *t;
 
-	t = (struct freeq_table *)malloc(sizeof(struct freeq_table) + (numcols * sizeof(struct freeq_column)));
+        t = (struct freeq_table *)malloc(sizeof(struct freeq_table) + (numcols * sizeof(struct freeq_column)));
 
-	if (!t) {
-		err(ctx, "unable to allocate memory for table\n");
-		return -ENOMEM;
-	}
+        if (!t) {
+                err(ctx, "unable to allocate memory for table\n");
+                return -ENOMEM;
+        }
 
-	t->name = strdup(name);
-	t->numcols = numcols;
-	t->refcount = 1;
-	t->numrows = 0;
-	t->ctx = ctx;
-	t->strings = g_string_chunk_new(DEFAULT_STRCHUNK_LENGTH);
+        t->name = strdup(name);
+        t->numcols = numcols;
+        t->refcount = 1;
+        t->numrows = 0;
+        t->ctx = ctx;
+        t->strings = g_string_chunk_new(DEFAULT_STRCHUNK_LENGTH);
 
-	dbg(ctx, "going to allocate columns...\n");
-	va_start(argp, destroy_data);
+        dbg(ctx, "going to allocate columns...\n");
+        va_start(argp, destroy_data);
 
-	for (int i = 0; i < t->numcols; i++)
-	{
-		GSList *d = va_arg(argp, GSList *);
-		if (d == NULL) {
-			freeq_table_unref(t);
-			err(ctx, "invalid column\n");
-			*table = NULL;
-			return -1;
-		}
-		dbg(ctx, "freeq_table_new: adding column %d\n", i);
-		t->columns[i].name = strdup(colnames[i]);
-		t->columns[i].coltype = coltypes[i];
-		t->columns[i].data = d;
-		collens[i] = g_slist_length(t->columns[i].data);
-	}
+        for (int i = 0; i < t->numcols; i++)
+        {
+                GSList *d = va_arg(argp, GSList *);
+                if (d == NULL) {
+                        freeq_table_unref(t);
+                        err(ctx, "invalid column\n");
+                        *table = NULL;
+                        return -1;
+                }
+                dbg(ctx, "freeq_table_new: adding column %d\n", i);
+                t->columns[i].name = strdup(colnames[i]);
+                t->columns[i].coltype = coltypes[i];
+                t->columns[i].data = d;
+                collens[i] = g_slist_length(t->columns[i].data);
+        }
 
-	va_end(argp);
+        va_end(argp);
 
-	if (ragged(numcols, (int *)&collens, &(t->numrows)))
-		dbg(ctx, "freeq_table_new: ragged table detected, using min col length %d\n", t->numrows);
+        if (ragged(numcols, (int *)&collens, &(t->numrows)))
+                dbg(ctx, "freeq_table_new: ragged table detected, using min col length %d\n", t->numrows);
 
-	*table = t;
-	return 0;
+        *table = t;
+        return 0;
 }
 
 FREEQ_EXPORT int freeq_table_new_fromcols(struct freeq_ctx *ctx,
-					  const char *name,
-					  int numcols,
-					  struct freeq_table **table,
-					  GStringChunk *strchnk,
-					  bool destroy_data)
+                                          const char *name,
+                                          int numcols,
+                                          struct freeq_table **table,
+                                          GStringChunk *strchnk,
+                                          bool destroy_data)
 {
-	struct freeq_table *t;
-	t = (struct freeq_table *)malloc(sizeof(struct freeq_table) + (numcols * sizeof(struct freeq_column)));
-	if (!t) {
-		err(ctx, "unable to allocate memory for table\n");
-		return -ENOMEM;
-	}
+        struct freeq_table *t;
+        t = (struct freeq_table *)malloc(sizeof(struct freeq_table) + (numcols * sizeof(struct freeq_column)));
+        if (!t) {
+                err(ctx, "unable to allocate memory for table\n");
+                return -ENOMEM;
+        }
 
-	t->name = strdup(name);
-	t->numcols = numcols;
-	t->numrows = 0;
-	t->destroy_data = destroy_data;
-	t->refcount = 1;
-	t->ctx = ctx;
-	t->strings = strchnk;
+        t->name = strdup(name);
+        t->numcols = numcols;
+        t->numrows = 0;
+        t->destroy_data = destroy_data;
+        t->refcount = 1;
+        t->ctx = ctx;
+        t->strings = strchnk;
 
-	for (int i = 0; i < numcols; i++)
-		t->columns[i].data = NULL;
+        for (int i = 0; i < numcols; i++)
+                t->columns[i].data = NULL;
 
-	if (t->strings == NULL)
-		t->strings = g_string_chunk_new(DEFAULT_STRCHUNK_LENGTH);
-	*table = t;
-	return 0;
+        if (t->strings == NULL)
+                t->strings = g_string_chunk_new(DEFAULT_STRCHUNK_LENGTH);
+        *table = t;
+        return 0;
 }
 
 FREEQ_EXPORT int freeq_table_bio_read(ctx, t, b, strchnk)
@@ -899,222 +897,362 @@ struct freeq_table **t;
 GStringChunk *strchnk;
 BIO *b;
 {
-	union {
-		int64_t i;
-		struct longlong s;
-	} r;
+        union {
+                int64_t i;
+                struct longlong s;
+        } r;
 
-	char *identity;
-	char *name;
-	char strbuf[1024] = {0};
-	ssize_t read;
-	int numcols = 0;
-	int more = 1;
-	int slen = 0;
-	unsigned int pos = 0;
-	struct freeq_table *tbl;
-	struct freeq_column *cols;
+        char *identity;
+        char *name;
+        char strbuf[1024] = {0};
+        ssize_t read;
+        int numcols = 0;
+        int more = 1;
+        int slen = 0;
+        unsigned int pos = 0;
+        struct freeq_table *tbl;
+        struct freeq_column *cols;
 
-	pos += BIO_read_varint(b, &(r.s));
-	dbg(ctx, "read %d bytes , name len %d\n", pos, r.i);
+        pos += BIO_read_varint(b, &(r.s));
+        dbg(ctx, "read %d bytes , name len %" PRId64 "\n", pos, r.i);
 
-	pos += BIO_read(b, (char *)&strbuf, (ssize_t)r.i);
-	name = strndup((char *)&strbuf, r.i);
+        pos += BIO_read(b, (char *)&strbuf, (ssize_t)r.i);
+        name = strndup((char *)&strbuf, r.i);
 
-	dbg(ctx, "name %s pos %d\n", name, pos);
+        dbg(ctx, "name %s pos %d\n", name, pos);
 
-	pos += BIO_read_varint(b, &(r.s));
-	pos += BIO_read(b, (char *)&strbuf, (ssize_t)r.i);
-	identity = strndup((char *)&strbuf, r.i);
-	dbg(ctx, "identity %s pos %d\n", identity, pos);
+        pos += BIO_read_varint(b, &(r.s));
+        pos += BIO_read(b, (char *)&strbuf, (ssize_t)r.i);
+        identity = strndup((char *)&strbuf, r.i);
+        dbg(ctx, "identity %s pos %d\n", identity, pos);
 
-	pos += BIO_read_varint(b, &(r.s));
-	numcols = r.i;
-	dbg(ctx, "numcols %d pos %d\n", numcols, pos);
+        pos += BIO_read_varint(b, &(r.s));
+        numcols = r.i;
+        dbg(ctx, "numcols %d pos %d\n", numcols, pos);
 
-	int err = freeq_table_new_fromcols(ctx,
-					   name,
-					   numcols,
-					   &tbl,
-					   strchnk,
-					   true);
-	if (err)
-	{
-		dbg(ctx, "freeq_table_new_fromcols failed!\n");
-		free(identity);
-		free(name);
-		return -ENOMEM;
-	}
+        int err = freeq_table_new_fromcols(ctx,
+                                           name,
+                                           numcols,
+                                           &tbl,
+                                           strchnk,
+                                           true);
+        if (err)
+        {
+                dbg(ctx, "freeq_table_new_fromcols failed!\n");
+                free(identity);
+                free(name);
+                return -ENOMEM;
+        }
 
-	cols = tbl->columns;
-	tbl->identity = identity;
+        cols = tbl->columns;
+        tbl->identity = identity;
 
-	for (int i = 0; i < numcols; i++)
-	{
-		pos += BIO_read(b, (char *)&(cols[i].coltype), 1);
-		dbg(ctx, "coltype for %d is %d, pos %d\n", i, cols[i].coltype, pos);
-	}
+        for (int i = 0; i < numcols; i++)
+        {
+                pos += BIO_read(b, (char *)&(cols[i].coltype), 1);
+                dbg(ctx, "coltype for %d is %d, pos %d\n", i, cols[i].coltype, pos);
+        }
 
-	for (int i = 0; i < numcols; i++)
-	{
-		pos += BIO_read_varint(b, &(r.s));
-		pos += BIO_read(b, (char *)&strbuf, r.i);
-		cols[i].name = strndup((char *)&strbuf, r.i);
-		dbg(ctx, "colname for %d is %s, pos %d\n", i, cols[i].name, pos);
-	}
+        for (int i = 0; i < numcols; i++)
+        {
+                pos += BIO_read_varint(b, &(r.s));
+                pos += BIO_read(b, (char *)&strbuf, r.i);
+                cols[i].name = strndup((char *)&strbuf, r.i);
+                dbg(ctx, "colname for %d is %s, pos %d\n", i, cols[i].name, pos);
+        }
 
-	dbg(ctx, "colnames, pos %d\n", pos);
-	GSList **coldata = calloc(sizeof(GSList *), tbl->numcols);
-	if (coldata == NULL)
-	{
-		dbg(ctx, "unable to allocate coldata lists\n");
-		return -ENOMEM;
-	}
+        dbg(ctx, "colnames, pos %d\n", pos);
+        GSList **coldata = calloc(sizeof(GSList *), tbl->numcols);
+        if (coldata == NULL)
+        {
+                dbg(ctx, "unable to allocate coldata lists\n");
+                return -ENOMEM;
+        }
 
-	int64_t prev[tbl->numcols];
-	memset(prev, 0, tbl->numcols * sizeof(int64_t));
+        int64_t prev[tbl->numcols];
+        memset(prev, 0, tbl->numcols * sizeof(int64_t));
 
-	int i = 0;
-	/* you know you're done when the buffer is < buflen dumbass */
-	while (more)
-	{
-		for (int j = 0; j < tbl->numcols; j++)
-		{
-			r.i = 0;
-			if (tbl->columns[j].coltype != FREEQ_COL_NULL)
-			{
-				read = BIO_read_varint(b, &(r.s));
-				if (read == 0)
-				{
-					more = 0;
-					break;
-				}
-				pos += read;
-			}
+        int i = 0;
+        /* you know you're done when the buffer is < buflen dumbass */
+        while (more)
+        {
+                for (int j = 0; j < tbl->numcols; j++)
+                {
+                        r.i = 0;
+                        if (tbl->columns[j].coltype != FREEQ_COL_NULL)
+                        {
+                                read = BIO_read_varint(b, &(r.s));
+                                if (read == 0)
+                                {
+                                        more = 0;
+                                        break;
+                                }
+                                pos += read;
+                        }
 
-			switch (tbl->columns[j].coltype) {
-			case FREEQ_COL_STRING:
-				dezigzag32(&(r.s));
-				slen = r.i;
-				//dbg(ctx, "%d/%d str len %" PRId64 " pos %d\n", i, j, r.i, pos);
-				if (slen > 0)
-				{
-					pos += BIO_read(b, (char *)&strbuf, slen);
-					strbuf[slen] = 0;
-					coldata[j] = g_slist_prepend(coldata[j], g_string_chunk_insert_const(tbl->strings, (char *)&strbuf));
-				}
-				else if (slen < 0)
-				{
-					dbg(ctx, "negative offset %d list length is %d, value at offset is %s\n",
-					    slen, g_slist_length(coldata[j]), (char *)g_slist_nth_data(coldata[j], -slen -1));
-					coldata[j] = g_slist_prepend(coldata[j], (char *)g_slist_nth_data(coldata[j], -slen -1));
-				}
-				else
-				{
-					dbg(ctx, "%d/%d empty string %d pos %d\n",i,j,slen, pos);
-					coldata[j] = g_slist_prepend(coldata[j], NULL);
-					//dbg(ctx, "string %s pos %d\n", coldata[j]->data, buf.p);
-				}
-				dbg(ctx, "%d/%d str %s pos %d\n",i,j, (char *)coldata[j]->data, pos);
-				break;
-			case FREEQ_COL_NUMBER:
-				dezigzag64(&(r.s));
-				//dbg(ctx, "prev[%d]: %" PRIu64" \n", j, prev[j]);
-				dbg(ctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " pos %d\n",
-					   i, j,          r.i,               prev[j] + r.i, pos);
-				prev[j] = prev[j] + r.i;
-				coldata[j] = g_slist_prepend(coldata[j], GINT_TO_POINTER(prev[j]));
-				break;
-			case FREEQ_COL_IPV4ADDR:
-				break;
-			case FREEQ_COL_TIME:
-				break;
-			default:
-				break;
-			}
-		}
-		if (more)
-			i++;
-	}
+                        switch (tbl->columns[j].coltype) {
+                        case FREEQ_COL_STRING:
+                                dezigzag32(&(r.s));
+                                slen = r.i;
+                                //dbg(ctx, "%d/%d str len %" PRId64 " pos %d\n", i, j, r.i, pos);
+                                if (slen > 0)
+                                {
+                                        pos += BIO_read(b, (char *)&strbuf, slen);
+                                        strbuf[slen] = 0;
+                                        coldata[j] = g_slist_prepend(coldata[j], g_string_chunk_insert_const(tbl->strings, (char *)&strbuf));
+                                }
+                                else if (slen < 0)
+                                {
+                                        dbg(ctx, "negative offset %d list length is %d, value at offset is %s\n",
+                                            slen, g_slist_length(coldata[j]), (char *)g_slist_nth_data(coldata[j], -slen -1));
+                                        coldata[j] = g_slist_prepend(coldata[j], (char *)g_slist_nth_data(coldata[j], -slen -1));
+                                }
+                                else
+                                {
+                                        dbg(ctx, "%d/%d empty string %d pos %d\n",i,j,slen, pos);
+                                        coldata[j] = g_slist_prepend(coldata[j], NULL);
+                                        //dbg(ctx, "string %s pos %d\n", coldata[j]->data, buf.p);
+                                }
+                                dbg(ctx, "%d/%d str %s pos %d\n",i,j, (char *)coldata[j]->data, pos);
+                                break;
+                        case FREEQ_COL_NUMBER:
+                                dezigzag64(&(r.s));
+                                //dbg(ctx, "prev[%d]: %" PRIu64" \n", j, prev[j]);
+                                dbg(ctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " pos %d\n",
+                                           i, j,          r.i,               prev[j] + r.i, pos);
+                                prev[j] = prev[j] + r.i;
+                                coldata[j] = g_slist_prepend(coldata[j], GINT_TO_POINTER(prev[j]));
+                                break;
+                        case FREEQ_COL_IPV4ADDR:
+                                break;
+                        case FREEQ_COL_TIME:
+                                break;
+                        default:
+                                break;
+                        }
+                }
+                if (more)
+                        i++;
+        }
 
-	for (int i = 0; i < tbl->numcols; i++)
-		tbl->columns[i].data = g_slist_concat(tbl->columns[i].data,
-						      g_slist_reverse(coldata[i]));
+        for (int i = 0; i < tbl->numcols; i++)
+                tbl->columns[i].data = g_slist_concat(tbl->columns[i].data,
+                                                      g_slist_reverse(coldata[i]));
 
-	dbg(ctx, "%d rows\n", i);
-	tbl->numrows = i;
-	*t = tbl;
-	return 0;
+        dbg(ctx, "%d rows\n", i);
+        tbl->numrows = i;
+        *t = tbl;
+        return 0;
 }
 
 int conn_cleanup(void)
 {
     int i;
     if (!mutex_buf)
-	return 0;
+        return 0;
     CRYPTO_set_id_callback(NULL);
     CRYPTO_set_locking_callback(NULL);
     for (i = 0; i < CRYPTO_num_locks(); i++)
-	pthread_mutex_destroy(&(mutex_buf[i]));
+        pthread_mutex_destroy(&(mutex_buf[i]));
     free(mutex_buf);
     mutex_buf = NULL;
     return 1;
 }
 
+FREEQ_EXPORT int freeq_sqlite_to_bio(struct freeq_ctx *freeqctx, BIO *b, sqlite4_stmt *pStmt)
+{
+        int err;
+        int numcols = 0;
+        const char zero = 0;
+        int slen = 0;
+        int pos = 0;
+        gchar *val;
+
+        /* column type is unset until the query has been
+         * stepped once */
+        if (sqlite4_step(pStmt) != SQLITE4_ROW)
+        {
+                dbg(freeqctx, "repsonse from first step was not SQLITE4_ROW...");
+                //freeq_error_write_sock(freeqctx, sqlite4_errmsg(pDb), b);
+                sqlite4_finalize(pStmt);
+                pthread_exit(NULL);
+        }
+
+        numcols = sqlite4_column_count(pStmt);
+        dbg(freeqctx, "response will include %d columns\n", numcols);
+
+        int ctypes[numcols];
+        GHashTable *strtbls[numcols];
+        uint64_t prev[numcols];
+        memset(prev, 0, sizeof(prev));
+        memset(strtbls, 0, sizeof(strtbls));
+
+        for (int j = 0; j < numcols; j++)
+        {
+                switch (sqlite4_column_type(pStmt, j))
+                {
+                case SQLITE4_INTEGER:
+                        ctypes[j] = FREEQ_COL_NUMBER;
+                        break;
+                case SQLITE4_TEXT:
+                        ctypes[j] = FREEQ_COL_STRING;
+                        break;
+                default:
+                        ctypes[j] = FREEQ_COL_NULL;
+                }
+        }
+
+        pos += BIO_write_vstr(b, (char *)"result");
+        dbg(freeqctx, "name result pos %d\n", pos);
+
+        pos += BIO_write_vstr(b, "identity");
+        dbg(freeqctx, "identity identity post %d\n", pos);
+
+        pos += BIO_write_varint32(b, numcols);
+        dbg(freeqctx, "numcols %d pos %d\n", numcols, pos);
+
+        for (int j=0; j < numcols; j++)
+        {
+                if (ctypes[j] == FREEQ_COL_STRING) {
+                        strtbls[j] = g_hash_table_new_full(g_str_hash,
+                                                           g_str_equal,
+                                                           NULL,
+                                                           NULL);
+                }
+        }
+
+        for (int j=0; j < numcols; j++)
+        {
+                pos += BIO_write(b,
+                                 (char *)&(ctypes[j]),
+                                 sizeof(freeq_coltype_t));
+                dbg(freeqctx, "coltype for %d is %d, pos %d\n", j,
+                    ctypes[j], pos);
+        }
+
+        for (int j=0; j < numcols; j++)
+        {
+                const char *name = sqlite4_column_name(pStmt, j);
+                pos += BIO_write_vstr(b, name);
+        }
+        int i = 0;
+        do
+        {
+                for (int j = 0; j < numcols; j++)
+                {
+                        uint64_t num = 0;
+                        switch (ctypes[j])
+                        {
+                        case FREEQ_COL_STRING:
+                                val = (gchar *)sqlite4_column_text(pStmt, j, &slen);
+                                if (val == NULL)
+                                {
+                                        pos += BIO_write(b, &zero, 1);
+                                        break;
+                                }
+                                if (g_hash_table_contains(strtbls[j], val))
+                                {
+                                        unsigned int idx = GPOINTER_TO_INT(g_hash_table_lookup(strtbls[j], val));
+                                        slen = idx - i;
+                                        pos += BIO_write_varintsigned32(b, slen);
+                                        dbg(freeqctx, "%d/%d str %s len %d pos %d\n",i,j,val,slen, pos);
+                                        g_hash_table_replace(strtbls[j], val, GINT_TO_POINTER(i));
+                                }
+                                else
+                                {
+                                        g_hash_table_insert(strtbls[j], val, GINT_TO_POINTER(i));
+                                        pos += BIO_write_varintsigned32(b, slen);
+                                        pos += BIO_write(b, val, slen);
+                                        dbg(freeqctx, "%d/%d str %s len %d pos %d\n", i,j,val, slen, pos);
+                                }
+                                break;
+                        case FREEQ_COL_NUMBER:
+                                num = sqlite4_column_int(pStmt, j);
+                                pos += BIO_write_varintsigned(b, (int64_t)num - prev[j]);
+                                dbg(freeqctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " pos %d\n",
+                                    i,j, num, (int64_t)num-prev[j], pos);
+                                prev[j] = num;
+                                break;
+                        default:
+                                break;
+                        }
+                }
+                i++;
+        }
+        while (SQLITE4_ROW == sqlite4_step(pStmt));
+
+        if ((err = BIO_flush(b)) < 0)
+                err(freeqctx, "Error flushing BIO");
+
+        for (int j = 0; j < numcols; j++)
+                if (ctypes[j] == FREEQ_COL_STRING)
+                        g_hash_table_destroy(strtbls[j]);
+
+        sqlite4_finalize(pStmt);
+        return FREEQ_OK;
+}
+
 FREEQ_EXPORT int freeq_table_sendto_ssl(struct freeq_ctx *freeqctx, struct freeq_table *t)
 {
-	BIO     *conn;
-	SSL     *ssl;
-	long    err;
-	const char *server = "localhost";
+        BIO     *conn;
+        SSL     *ssl;
+        long    err;
+        const char *server = "localhost";
 
-	if (freeq_init_ssl(freeqctx))
-		exit(1);
+        conn = BIO_new_connect("localhost:13001");
+        if (!conn)
+        {
+                err(freeqctx, "Error creating connection BIO");
+                return FREEQ_ERR;
+        }
 
-	conn = BIO_new_connect("localhost:13001");
-	if (!conn)
-		int_error("Error creating connection BIO") ;
+        if (BIO_do_connect(conn) <= 0)
+        {
+                err(freeqctx, "Error connecting to remote machine\n");
+                return FREEQ_ERR;
+        }
 
-	if (BIO_do_connect(conn) <= 0)
-		int_error("Error connecting to remote machine");
+        ssl = SSL_new(freeqctx->sslctx);
+        SSL_set_bio(ssl, conn, conn);
+        if (SSL_connect(ssl) <= 0)
+        {
+                err(freeqctx, "Error connecting SSL object");
+                return FREEQ_ERR;
+        }
 
-	ssl = SSL_new(freeqctx->sslctx);
-	SSL_set_bio(ssl, conn, conn);
-	if (SSL_connect(ssl) <= 0)
-		int_error("Error connecting SSL object");
-	if ((err = post_connection_check(freeqctx, ssl, server)) != X509_V_OK)
-	{
-		fprintf(stderr, "-Error: peer certificate: %s\n",
-			X509_verify_cert_error_string(err));
-		int_error("Error checking SSL object after connection");
-	}
+        if ((err = post_connection_check(freeqctx, ssl, server)) != X509_V_OK)
+        {
+                err(freeqctx, "peer certificate: %s\n",
+                    X509_verify_cert_error_string(err));
+                int_error("Error checking SSL object after connection");
+                return FREEQ_ERR;
+        }
 
-	BIO  *buf_io, *ssl_bio;
-	buf_io = BIO_new(BIO_f_buffer());
-	ssl_bio = BIO_new(BIO_f_ssl());
-	BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE);
-	BIO_push(buf_io, ssl_bio);
+        BIO  *buf_io, *ssl_bio;
+        buf_io = BIO_new(BIO_f_buffer());
+        ssl_bio = BIO_new(BIO_f_ssl());
+        BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE);
+        BIO_push(buf_io, ssl_bio);
 
-	dbg(freeqctx, "ssl connection established\n");
+        dbg(freeqctx, "ssl connection established\n");
 
-	/* because we SSL_free below there's no point in calling
-	   SSL_clear here however it might make sense to cache these
-	   objects when we're publishing more than one table */
-	if (freeq_table_bio_write(freeqctx, t, buf_io))
-	{
-		dbg(freeqctx, "bio_wrap returned zero\n");
-		SSL_clear(ssl);
-	}
-	else
-	{
-		dbg(freeqctx, "bio_wrap returned non-zero\n");
-		SSL_shutdown(ssl);
-	}
+        /* because we SSL_free below there's no point in calling
+           SSL_clear here however it might make sense to cache these
+           objects when we're publishing more than one table */
+        if (freeq_table_bio_write(freeqctx, t, buf_io))
+        {
+                dbg(freeqctx, "bio_wrap returned zero\n");
+                SSL_clear(ssl);
+        }
+        else
+        {
+                dbg(freeqctx, "bio_wrap returned non-zero\n");
+                SSL_shutdown(ssl);
+        }
 
-	dbg(freeqctx, "ssl connection closed normally\n");
-	SSL_free(ssl);
-	//SSL_CTX_free(sslctx);
-	return 0;
+        dbg(freeqctx, "ssl connection closed normally\n");
+        SSL_free(ssl);
+        return 0;
 }
 
 FREEQ_EXPORT int freeq_table_bio_write(ctx, t, b)
@@ -1122,155 +1260,157 @@ struct freeq_ctx *ctx;
 struct freeq_table *t;
 BIO *b;
 {
-	int i = 0;
-	gchar *val;
-	int slen = 0;
-	unsigned int pos = 0;
-	const char zero = 0;
+        int i = 0;
+        gchar *val;
+        int slen = 0;
+        unsigned int pos = 0;
+        const char zero = 0;
 
-	// use a union here
-	GHashTable *strtbls[t->numcols];
-	uint64_t prev[t->numcols];
+        // use a union here
+        GHashTable *strtbls[t->numcols];
+        uint64_t prev[t->numcols];
 
-	memset(prev, 0, sizeof(prev));
-	GSList *colnxt[t->numcols];
+        memset(prev, 0, sizeof(prev));
+        GSList *colnxt[t->numcols];
 
-	slen = strlen(t->name);
-	pos += BIO_write_varint32(b, slen);
-	pos += BIO_write(b, (const char *)t->name, slen);
-	dbg(ctx, "name %s write %d\n", t->name, pos);
+        slen = strlen(t->name);
+        pos += BIO_write_varint32(b, slen);
+        pos += BIO_write(b, (const char *)t->name, slen);
+        dbg(ctx, "name %s write %d\n", t->name, pos);
 
-	slen = strlen(ctx->identity);
-	pos += BIO_write_varint32(b, slen);
-	pos += BIO_write(b, (const char *)ctx->identity, slen);
-	dbg(ctx, "identity %s write %d\n", t->identity, pos);
+        slen = strlen(ctx->identity);
+        pos += BIO_write_varint32(b, slen);
+        pos += BIO_write(b, (const char *)ctx->identity, slen);
+        dbg(ctx, "identity %s write %d\n", t->identity, pos);
 
-	pos += BIO_write_varint32(b, t->numcols);
-	dbg(ctx, "numcols %d write %d\n", t->numcols, pos);
+        pos += BIO_write_varint32(b, t->numcols);
+        dbg(ctx, "numcols %d write %d\n", t->numcols, pos);
 
-	for (i=0; i < t->numcols; i++)
-	{
-		pos += BIO_write(b, (char *)&(t->columns[i].coltype), sizeof(freeq_coltype_t));
-		dbg(ctx, "coltype for %d is %d, pos %d\n", i, t->columns[i].coltype, pos);
-	}
+        for (i=0; i < t->numcols; i++)
+        {
+                pos += BIO_write(b, (char *)&(t->columns[i].coltype), sizeof(freeq_coltype_t));
+                dbg(ctx, "coltype for %d is %d, pos %d\n", i, t->columns[i].coltype, pos);
+        }
 
-	for (i=0; i < t->numcols; i++)
-	{
-		slen = strlen(t->columns[i].name);
-		pos += BIO_write_varint32(b, slen);
-		pos += BIO_write(b, (const char *)t->columns[i].name, slen);
-		dbg(ctx, "colname for %d is %s, pos %d\n", i, t->columns[i].name, pos);
-	}
-	dbg(ctx, "colnames, pos %d\n", pos);
+        for (i=0; i < t->numcols; i++)
+        {
+                slen = strlen(t->columns[i].name);
+                pos += BIO_write_varint32(b, slen);
+                pos += BIO_write(b, (const char *)t->columns[i].name, slen);
+                dbg(ctx, "colname for %d is %s, pos %d\n", i, t->columns[i].name, pos);
+        }
+        dbg(ctx, "colnames, pos %d\n", pos);
 
-	for (i=0; i < t->numcols; i++)
-	{
-		if (t->columns[i].coltype == FREEQ_COL_STRING)
-			strtbls[i] = g_hash_table_new_full(g_str_hash,
-							   g_str_equal,
-							   NULL,
-							   NULL);
-		colnxt[i] = t->columns[i].data;
-	}
+        for (i=0; i < t->numcols; i++)
+        {
+                if (t->columns[i].coltype == FREEQ_COL_STRING)
+                        strtbls[i] = g_hash_table_new_full(g_str_hash,
+                                                           g_str_equal,
+                                                           NULL,
+                                                           NULL);
+                colnxt[i] = t->columns[i].data;
+        }
 
-	for (i = 0; i < t->numrows; i++)
-	{
-		for (int j = 0; j < t->numcols; j++)
-		{
-			uint64_t num = 0;
-			switch (t->columns[j].coltype)
-			{
-			case FREEQ_COL_STRING:
-				val = colnxt[j]->data;
-				slen = strlen(val);
-				if ((val == NULL) || (slen == 0)) {
-					pos += BIO_write(b, &zero, 1);
-					dbg(ctx, "%d/%d string empty pos %d\n", i, j, pos);
-					break;
-				}
+        for (i = 0; i < t->numrows; i++)
+        {
+                for (int j = 0; j < t->numcols; j++)
+                {
+                        uint64_t num = 0;
+                        switch (t->columns[j].coltype)
+                        {
+                        case FREEQ_COL_STRING:
+                                val = colnxt[j]->data;
+                                slen = strlen(val);
+                                if ((val == NULL) || (slen == 0)) {
+                                        pos += BIO_write(b, &zero, 1);
+                                        dbg(ctx, "%d/%d string empty pos %d\n", i, j, pos);
+                                        break;
+                                }
 
-				if (g_hash_table_contains(strtbls[j], val))
-				{
-					unsigned int idx = GPOINTER_TO_INT(g_hash_table_lookup(strtbls[j], val));
-					slen = idx - i;
-					pos += BIO_write_varintsigned32(b, slen);
-					dbg(ctx, "%d/%d str %s len %d pos %d\n",i,j,val,slen, pos);
-					g_hash_table_replace(strtbls[j], val, GINT_TO_POINTER(i));
-				}
-				else
-				{
-					g_hash_table_insert(strtbls[j], val, GINT_TO_POINTER(i));
-					pos += BIO_write_varintsigned32(b, slen);
-					pos += BIO_write(b, val, slen);
-					dbg(ctx, "%d/%d str %s len %d pos %d\n", i,j,val, slen, pos);
-				}
-				break;
-			case FREEQ_COL_NUMBER:
-				num = GPOINTER_TO_INT(colnxt[j]->data);
-				pos += BIO_write_varintsigned(b, (int64_t)num - prev[j]);
-				dbg(ctx, "prev[%d]: %" PRIu64 "\n", j, prev[j]);
-				dbg(ctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " pos %d\n",
-				    i,j, num, (int64_t)num-prev[j], pos);
-				prev[j] = num;
-				break;
-			case FREEQ_COL_IPV4ADDR:
-				break;
-			case FREEQ_COL_TIME:
-				break;
-			default:
-				//dbg(ctx, "coltype %d not yet implemented\n", col->coltype);
-				break;
-			}
-			colnxt[j] = g_slist_next(colnxt[j]);
-		}
-	}
+                                if (g_hash_table_contains(strtbls[j], val))
+                                {
+                                        unsigned int idx = GPOINTER_TO_INT(g_hash_table_lookup(strtbls[j], val));
+                                        slen = idx - i;
+                                        pos += BIO_write_varintsigned32(b, slen);
+                                        dbg(ctx, "%d/%d str %s len %d pos %d\n",i,j,val,slen, pos);
+                                        g_hash_table_replace(strtbls[j], val, GINT_TO_POINTER(i));
+                                }
+                                else
+                                {
+                                        g_hash_table_insert(strtbls[j], val, GINT_TO_POINTER(i));
+                                        pos += BIO_write_varintsigned32(b, slen);
+                                        pos += BIO_write(b, val, slen);
+                                        dbg(ctx, "%d/%d str %s len %d pos %d\n", i,j,val, slen, pos);
+                                }
+                                break;
+                        case FREEQ_COL_NUMBER:
+                                num = GPOINTER_TO_INT(colnxt[j]->data);
+                                pos += BIO_write_varintsigned(b, (int64_t)num - prev[j]);
+                                dbg(ctx, "prev[%d]: %" PRIu64 "\n", j, prev[j]);
+                                dbg(ctx, "%d/%d value raw %" PRId64 " delta %" PRId64 " pos %d\n",
+                                    i,j, num, (int64_t)num-prev[j], pos);
+                                prev[j] = num;
+                                break;
+                        case FREEQ_COL_IPV4ADDR:
+                                break;
+                        case FREEQ_COL_TIME:
+                                break;
+                        default:
+                                //dbg(ctx, "coltype %d not yet implemented\n", col->coltype);
+                                break;
+                        }
+                        colnxt[j] = g_slist_next(colnxt[j]);
+                }
+        }
 
-	for (i = 0; i < t->numcols; i++)
-		if (t->columns[i].coltype == FREEQ_COL_STRING)
-			g_hash_table_destroy(strtbls[i]);
+        for (i = 0; i < t->numcols; i++)
+                if (t->columns[i].coltype == FREEQ_COL_STRING)
+                        g_hash_table_destroy(strtbls[i]);
 
-	BIO_flush(b);
-	return 0;
+
+
+        BIO_flush(b);
+        return 0;
 }
 
 
 FREEQ_EXPORT void freeq_table_print(struct freeq_ctx *ctx, struct freeq_table *t, FILE *of)
 {
-	GSList *colp[t->numcols];
+        GSList *colp[t->numcols];
 
-	memset(colp, 0, t->numcols * sizeof(GSList *) );
-	for (int j = 0; j < t->numcols; j++)
-		colp[j] = t->columns[j].data;
+        memset(colp, 0, t->numcols * sizeof(GSList *) );
+        for (int j = 0; j < t->numcols; j++)
+                colp[j] = t->columns[j].data;
 
-	//fprintf(of, "%s\n", t->identity);
-	fprintf(of, "%d\n", t->serial);
-	fprintf(of, "%s\n", t->name);
+        //fprintf(of, "%s\n", t->identity);
+        fprintf(of, "%d\n", t->serial);
+        fprintf(of, "%s\n", t->name);
 
-	for (int j=0; j < t->numcols; j++)
-		fprintf(of, "%s%s", t->columns[j].name, j < t->numcols - 1 ? "," : "\n");
+        for (int j=0; j < t->numcols; j++)
+                fprintf(of, "%s%s", t->columns[j].name, j < t->numcols - 1 ? "," : "\n");
 
-	for (int j=0; j < t->numcols; j++)
-		fprintf(of, "%s%s", coltypes[t->columns[j].coltype], j < t->numcols - 1 ? "," : "\n");
+        for (int j=0; j < t->numcols; j++)
+                fprintf(of, "%s%s", coltypes[t->columns[j].coltype], j < t->numcols - 1 ? "," : "\n");
 
-	for (uint32_t i=0; i < t->numrows; i++)
-	{
-		for (uint32_t j=0; j < t->numcols; j++)
-		{
-			switch (t->columns[j].coltype)
-			{
-			case FREEQ_COL_STRING:
-				fprintf(of, "%s", colp[j]->data == NULL ? "null" : (char *)colp[j]->data);
-				break;
-			case FREEQ_COL_NUMBER:
-				fprintf(of, "%d", GPOINTER_TO_INT(colp[j]->data));
-				break;
-			default:
-				break;
-			}
-			fprintf(of, CSEP(j, t));
-			colp[j] = g_slist_next(colp[j]);
-		}
-	}
+        for (uint32_t i=0; i < t->numrows; i++)
+        {
+                for (uint32_t j=0; j < t->numcols; j++)
+                {
+                        switch (t->columns[j].coltype)
+                        {
+                        case FREEQ_COL_STRING:
+                                fprintf(of, "%s", colp[j]->data == NULL ? "null" : (char *)colp[j]->data);
+                                break;
+                        case FREEQ_COL_NUMBER:
+                                fprintf(of, "%d", GPOINTER_TO_INT(colp[j]->data));
+                                break;
+                        default:
+                                break;
+                        }
+                        fprintf(of, CSEP(j, t));
+                        colp[j] = g_slist_next(colp[j]);
+                }
+        }
 }
 
 FREEQ_EXPORT void handle_error(const char *file, int lineno, const char *msg)
@@ -1286,16 +1426,16 @@ FREEQ_EXPORT int verify_callback(int ok, X509_STORE_CTX *store)
 
     if (!ok)
     {
-	X509 *cert = X509_STORE_CTX_get_current_cert(store);
-	int  depth = X509_STORE_CTX_get_error_depth(store);
-	int  err = X509_STORE_CTX_get_error(store);
+        X509 *cert = X509_STORE_CTX_get_current_cert(store);
+        int  depth = X509_STORE_CTX_get_error_depth(store);
+        int  err = X509_STORE_CTX_get_error(store);
 
-	fprintf(stderr, "-Error with certificate at depth: %i\n", depth);
-	X509_NAME_oneline(X509_get_issuer_name(cert), data, 256);
-	fprintf(stderr, "  issuer   = %s\n", data);
-	X509_NAME_oneline(X509_get_subject_name(cert), data, 256);
-	fprintf(stderr, "  subject  = %s\n", data);
-	fprintf(stderr, "  err %i:%s\n", err, X509_verify_cert_error_string(err));
+        fprintf(stderr, "-Error with certificate at depth: %i\n", depth);
+        X509_NAME_oneline(X509_get_issuer_name(cert), data, 256);
+        fprintf(stderr, "  issuer   = %s\n", data);
+        X509_NAME_oneline(X509_get_subject_name(cert), data, 256);
+        fprintf(stderr, "  subject  = %s\n", data);
+        fprintf(stderr, "  err %i:%s\n", err, X509_verify_cert_error_string(err));
     }
 
     return ok;
@@ -1318,66 +1458,66 @@ FREEQ_EXPORT long post_connection_check(struct freeq_ctx *ctx, SSL *ssl, const c
 
     dbg(ctx, "in post connection check, checking cert...\n");
     if (!(cert = SSL_get_peer_certificate(ssl)) || !host)
-	goto err_occured;
+        goto err_occured;
 
     dbg(ctx, "in post connection check, checking extensions...\n");
     if ((extcount = X509_get_ext_count(cert)) > 0)
     {
-	for (int i = 0;  i < extcount;  i++)
-	{
-	    char              *extstr;
-	    X509_EXTENSION    *ext;
+        for (int i = 0;  i < extcount;  i++)
+        {
+            char              *extstr;
+            X509_EXTENSION    *ext;
 
-	    ext = X509_get_ext(cert, i);
-	    extstr = (char*) OBJ_nid2sn(OBJ_obj2nid(X509_EXTENSION_get_object(ext)));
+            ext = X509_get_ext(cert, i);
+            extstr = (char*) OBJ_nid2sn(OBJ_obj2nid(X509_EXTENSION_get_object(ext)));
 
-	    if (!strcmp(extstr, "subjectAltName"))
-	    {
-		int                  j;
-		unsigned char        *data;
-		STACK_OF(CONF_VALUE) *val;
-		CONF_VALUE           *nval;
-		void                 *ext_str = NULL;
-		const X509V3_EXT_METHOD    *meth = X509V3_EXT_get(ext);
-		if (!meth)
-		    break;
-		data = ext->value->data;
+            if (!strcmp(extstr, "subjectAltName"))
+            {
+                int                  j;
+                unsigned char        *data;
+                STACK_OF(CONF_VALUE) *val;
+                CONF_VALUE           *nval;
+                void                 *ext_str = NULL;
+                const X509V3_EXT_METHOD    *meth = X509V3_EXT_get(ext);
+                if (!meth)
+                    break;
+                data = ext->value->data;
 
 #if (OPENSSL_VERSION_NUMBER > 0x00907000L)
-		if (meth->it)
-			ext_str = ASN1_item_d2i(NULL, (const unsigned char **)&data, ext->value->length,
-						ASN1_ITEM_ptr(meth->it));
-		else
-			ext_str = meth->d2i(NULL, (const unsigned char **)&data, ext->value->length);
+                if (meth->it)
+                        ext_str = ASN1_item_d2i(NULL, (const unsigned char **)&data, ext->value->length,
+                                                ASN1_ITEM_ptr(meth->it));
+                else
+                        ext_str = meth->d2i(NULL, (const unsigned char **)&data, ext->value->length);
 #else
-		ext_str = meth->d2i(NULL, &data, ext->value->length);
+                ext_str = meth->d2i(NULL, &data, ext->value->length);
 #endif
-		val = meth->i2v(meth, ext_str, NULL);
-		for (j = 0;  j < sk_CONF_VALUE_num(val);  j++)
-		{
-			nval = sk_CONF_VALUE_value(val, j);
-			if (!strcmp(nval->name, "DNS") && !strcmp(nval->value, host))
-			{
-				ok = 1;
-				break;
-			}
-		}
-	    }
-	    if (ok)
-		    break;
-	}
+                val = meth->i2v(meth, ext_str, NULL);
+                for (j = 0;  j < sk_CONF_VALUE_num(val);  j++)
+                {
+                        nval = sk_CONF_VALUE_value(val, j);
+                        if (!strcmp(nval->name, "DNS") && !strcmp(nval->value, host))
+                        {
+                                ok = 1;
+                                break;
+                        }
+                }
+            }
+            if (ok)
+                    break;
+        }
     }
 
     dbg(ctx, "in post connection check, checking subject...\n");
     if (!ok && (subj = X509_get_subject_name(cert)) &&
-	X509_NAME_get_text_by_NID(subj, NID_commonName, data, 256) > 0)
+        X509_NAME_get_text_by_NID(subj, NID_commonName, data, 256) > 0)
     {
-	    data[255] = 0;
-	    if (strcasecmp(data, host) != 0)
-	    {
-		    dbg(ctx, "in post connection check, mismatch: %s/%s...\n", data, host);
-		    //goto err_occured;
-	    }
+            data[255] = 0;
+            if (strcasecmp(data, host) != 0)
+            {
+                    dbg(ctx, "in post connection check, mismatch: %s/%s...\n", data, host);
+                    //goto err_occured;
+            }
     }
 
     dbg(ctx, "in post connection check, checking subject...\n");
@@ -1386,7 +1526,7 @@ FREEQ_EXPORT long post_connection_check(struct freeq_ctx *ctx, SSL *ssl, const c
 
 err_occured:
     if (cert)
-	    X509_free(cert);
+            X509_free(cert);
     return X509_V_ERR_APPLICATION_VERIFICATION;
 }
 
@@ -1402,15 +1542,15 @@ void showcerts(SSL* ssl)
     cert = SSL_get_peer_certificate(ssl);	/* Get certificates (if available) */
     if ( cert != NULL )
     {
-	printf("Server certificates:\n");
-	line = X509_NAME_oneline(X509_get_subject_name(cert), 0, 0);
-	printf("Subject: %s\n", line);
-	free(line);
-	line = X509_NAME_oneline(X509_get_issuer_name(cert), 0, 0);
-	printf("Issuer: %s\n", line);
-	free(line);
-	X509_free(cert);
+        printf("Server certificates:\n");
+        line = X509_NAME_oneline(X509_get_subject_name(cert), 0, 0);
+        printf("Subject: %s\n", line);
+        free(line);
+        line = X509_NAME_oneline(X509_get_issuer_name(cert), 0, 0);
+        printf("Issuer: %s\n", line);
+        free(line);
+        X509_free(cert);
     }
     else
-	printf("No certificates.\n");
+        printf("No certificates.\n");
 }

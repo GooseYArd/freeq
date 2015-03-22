@@ -96,13 +96,10 @@ libcontrol_a_SOURCES = \
 	control/substdo.c
 
 #libfreeq_1_0_la_LIBADD = $(NANOMSG_LDFLAGS) $(GLIB_LIBS)  -lssl -lcrypto
-libfreeq_1_0_la_LIBADD = $(GLIB_LIBS)  -lssl -lcrypto
+libfreeq_1_0_la_LIBADD = $(GLIB_LIBS) -lssl -lcrypto $(SQLITE4_LDFLAGS)
 
-client_SOURCES = src/client.c src/system.h
-ssl_server_SOURCES = src/ssl_server.c src/system.h
-ssl_client_SOURCES = src/ssl_client.c src/system.h
 freeqd_SOURCES = src/freeqd.c src/system.h
-freeql_SOURCES = src/freeql.cc src/system.h
+freeql_SOURCES = src/freeql.c src/system.h
 system_monitor_SOURCES = src/system_monitor.c src/system.h
 tblsend_SOURCES = src/tblsend.c
 
@@ -119,6 +116,8 @@ system_monitor_LDADD = \
 	$(LIBINTL) \
 	$(top_builddir)/lib/libfreeq.la \
 	libfreeq-1.0.la \
+	libcontrol.a \
+	$(SQLITE4_LDFLAGS) \
 	$(GLIB_LIBS) \
 	$(PROCPS_LIBS)
 
@@ -129,34 +128,6 @@ freeqd_LDADD = \
 	libfreeq-1.0.la \
 	$(GLIB_LIBS) \
 	$(SQLITE4_LDFLAGS) \
-	-lssl \
-	-lcrypto \
-	$(OPENSSL_LIBS)
-
-client_LDADD = \
-	$(LIBINTL) \
-	$(top_builddir)/lib/libfreeq.la \
-	libcontrol.a \
-	libfreeq-1.0.la \
-	-lssl \
-	-lcrypto \
-	$(OPENSSL_LIBS)
-
-
-ssl_server_LDADD = \
-	$(LIBINTL) \
-	$(top_builddir)/lib/libfreeq.la \
-	libcontrol.a \
-	libfreeq-1.0.la \
-	-lssl \
-	-lcrypto \
-	$(OPENSSL_LIBS)
-
-ssl_client_LDADD = \
-	$(LIBINTL) \
-	$(top_builddir)/lib/libfreeq.la \
-	libcontrol.a \
-	libfreeq-1.0.la \
 	-lssl \
 	-lcrypto \
 	$(OPENSSL_LIBS)

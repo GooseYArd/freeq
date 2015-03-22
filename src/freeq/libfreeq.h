@@ -36,6 +36,8 @@ extern "C" {
 #include "openssl/ssl.h"
 #include "openssl/err.h"
 
+#include "sqlite4.h"
+
 #define FREEQ_ERR 1
 #define FREEQ_OK 0
 
@@ -178,6 +180,7 @@ int freeq_init_ssl(struct freeq_ctx *ctx);
 SSL *freeq_ssl_new(struct freeq_ctx *ctx);
 int freeq_table_ssl_read(struct freeq_ctx *ctx, struct freeq_table **tbl, SSL *ssl);
 int freeq_table_sendto_ssl(struct freeq_ctx *freeqctx, struct freeq_table *t);
+int freeq_sqlite_to_bio(struct freeq_ctx *freeqctx, BIO *b, sqlite4_stmt *pStmt);
 
 int freeq_table_new(struct freeq_ctx *ctx,
 		    const char *name,
