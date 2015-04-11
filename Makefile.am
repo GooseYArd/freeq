@@ -105,7 +105,6 @@ tblsend_SOURCES = src/tblsend.c
 
 tblsend_LDADD = \
 	$(LIBINTL) \
-	$(top_builddir)/lib/libfreeq.la \
 	libfreeq-1.0.la \
 	$(GLIB_LIBS) \
 	-lssl \
@@ -114,7 +113,6 @@ tblsend_LDADD = \
 
 system_monitor_LDADD = \
 	$(LIBINTL) \
-	$(top_builddir)/lib/libfreeq.la \
 	libfreeq-1.0.la \
 	libcontrol.a \
 	$(SQLITE4_LDFLAGS) \
@@ -123,7 +121,6 @@ system_monitor_LDADD = \
 
 freeqd_LDADD = \
 	$(LIBINTL) \
-	$(top_builddir)/lib/libfreeq.la \
 	libcontrol.a \
 	libfreeq-1.0.la \
 	$(GLIB_LIBS) \
@@ -134,7 +131,6 @@ freeqd_LDADD = \
 
 freeql_LDADD = \
 	$(LIBINTL) \
-	$(top_builddir)/lib/libfreeq.la \
 	libfreeq-1.0.la  \
 	$(GLIB_LIBS) \
 	-lssl \
@@ -165,7 +161,7 @@ noinst_LTLIBRARIES =
 BUILT_SOURCES =
 CLEANFILES =
 
-include $(top_srcdir)/lib/local.mk
+#include $(top_srcdir)/lib/local.mk
 
 # Verify that all source files using _() are listed in po/POTFILES.in.
 # The idea is to run this before making pretests, as well as official

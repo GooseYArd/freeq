@@ -144,7 +144,7 @@ main(int argc, char *argv[])
         struct freeq_ctx *ctx;
         int err;
 
-        set_program_name(argv[0]);
+//        set_program_name(argv[0]);
         setlocale(LC_ALL, "");
 
 #if ENABLE_NLS

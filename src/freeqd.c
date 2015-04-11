@@ -676,7 +676,7 @@ main (int argc, char *argv[])
         pthread_t t_cliserver;
         static stralloc clients = {0};
 
-        set_program_name(argv[0]);
+//        set_program_name(argv[0]);
         setlocale(LC_ALL, "");
 
 #if ENABLE_NLS

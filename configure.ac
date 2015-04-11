@@ -24,6 +24,7 @@ AM_INIT_AUTOMAKE([
 AC_PREREQ([2.62])
 
 AC_CONFIG_MACRO_DIR([m4])
+AC_USE_SYSTEM_EXTENSIONS
 
 dnl Where to generate output; srcdir location.
 AC_CONFIG_HEADERS([config.h:config.in])dnl Keep filename to 8.3 for MS-DOS.
@@ -32,11 +33,11 @@ AC_CONFIG_SRCDIR([src/libfreeq.c])
 dnl AC_PROG_CC
 AC_PROG_CC_C99
 
-dnl Since we use gnulib: gl_EARLY must be called as soon as possible after
-dnl the C compiler is checked.  The others could be later, but we just
-dnl keep everything together.
-gl_EARLY
-gl_INIT
+###dnl Since we use gnulib: gl_EARLY must be called as soon as possible after
+###dnl the C compiler is checked.  The others could be later, but we just
+###dnl keep everything together.
+###gl_EARLY
+###gl_INIT
 
 LT_INIT
 
@@ -64,10 +65,7 @@ PKG_CHECK_MODULES(PROCPS, libprocps)
 
 PKG_CHECK_MODULES([CHECK], [check >= 0.9.4])
 
-#AC_LANG_PUSH([C++])
-#PKG_CHECK_MODULES(GLOG, libglog)
-#AC_LANG_POP([C++])
-
+AC_USE_SYSTEM_EXTENSIONS
 AC_GNU_SOURCE
 AC_CHECK_FUNCS([__secure_getenv secure_getenv])
 

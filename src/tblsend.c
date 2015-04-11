@@ -310,7 +310,7 @@ main (int argc, char *argv[])
   //const char *node_name = _("unknown");
   const char *fn;
 
-  set_program_name (argv[0]);
+//  set_program_name (argv[0]);
   setlocale (LC_ALL, "");
 
 #if ENABLE_NLS
@@ -342,12 +342,12 @@ main (int argc, char *argv[])
 
   if (lose || optind < argc)
   {
-    if (optind < argc)
-      fprintf (stderr, _("%s: extra operand: %s\n"), program_name,
-               argv[optind]);
-    fprintf (stderr, _("Try `%s --help' for more information.\n"),
-             program_name);
-    exit (EXIT_FAILURE);
+          /* if (optind < argc) */
+          /*         fprintf (stderr, _("%s: extra operand: %s\n"), program_name, */
+          /*                  argv[optind]); */
+          /* fprintf (stderr, _("Try `%s --help' for more information.\n"), */
+          /*          program_name); */
+          exit (EXIT_FAILURE);
   }
 
   DEBUG("starting publisher");
@@ -362,8 +362,8 @@ print_help (void)
 {
   /* TRANSLATORS: --help output 1 (synopsis)
      no-wrap */
-  printf (_("\
-Usage: %s [OPTION]...\n"), program_name);
+/*  printf (_("                                 \
+    Usage: %s [OPTION]...\n"), program_name); */
 
   /* TRANSLATORS: --help output 2 (brief description)
      no-wrap */
