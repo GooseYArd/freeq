@@ -1,7 +1,4 @@
 #include <config.h>
-#include "system.h"
-#include "progname.h"
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -143,14 +140,6 @@ main(int argc, char *argv[])
 {
         struct freeq_ctx *ctx;
         int err;
-
-//        set_program_name(argv[0]);
-        setlocale(LC_ALL, "");
-
-#if ENABLE_NLS
-        bindtextdomain (PACKAGE, LOCALEDIR);
-        textdomain (PACKAGE);
-#endif
         static stralloc identity = {0};
 
         err = freeq_new(&ctx, "system_monitor", NULL, FREEQ_CLIENT);

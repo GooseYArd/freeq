@@ -1,6 +1,4 @@
 #include <config.h>
-#include "system.h"
-#include "progname.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -15,19 +13,11 @@
 int
 main (int argc, char *argv[])
 {
-  const char *node_name = _("localhost");
+  const char *node_name = "localhost";
   struct freeq_table *tbl;
   char *sql;
   struct freeq_ctx *freeqctx;
   int err;
-
-//  set_program_name(argv[0]);
-  setlocale(LC_ALL, "");
-
-#if ENABLE_NLS
-  bindtextdomain(PACKAGE, LOCALEDIR);
-  textdomain(PACKAGE);
-#endif
 
   err = freeq_new(&freeqctx, "freeql", node_name, FREEQ_CLIENT);
   if (err < 0)

@@ -1,7 +1,4 @@
 #include <config.h>
-#include "system.h"
-#include "progname.h"
-
 #include <assert.h>
 #include <string.h>
 #include <time.h>
@@ -675,14 +672,6 @@ main (int argc, char *argv[])
         pthread_t t_sqlserver;
         pthread_t t_cliserver;
         static stralloc clients = {0};
-
-//        set_program_name(argv[0]);
-        setlocale(LC_ALL, "");
-
-#if ENABLE_NLS
-        bindtextdomain(PACKAGE, LOCALEDIR);
-        textdomain(PACKAGE);
-#endif
 
         err = freeq_new(&freeqctx, "appname", "identity", FREEQ_SERVER);
         if (err < 0)
